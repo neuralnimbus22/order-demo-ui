@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
 import LogoutButton from "./logout-button";
+import CartBadge from "./cart-badge";
 
 // Server component — auth state comes straight from the session cookie +
 // user-session /validate (via getSession), so the header is always truthful
@@ -19,6 +20,7 @@ export default async function SiteHeader() {
           Sundry
         </Link>
         <nav className="flex items-center gap-5 text-sm">
+          <CartBadge />
           {session ? (
             <>
               <Link
