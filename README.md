@@ -91,3 +91,31 @@ spec runs backend-free.
 `USER_SESSION_URL`, `SESSION_SECRET` — see `.env.example`. `auth-service` is
 intentionally absent: the UI never calls it (order-service authorizes orders
 internally with its own token).
+
+## Deploy to GKE
+
+The image builds and pushes automatically: a push to `main` that touches app
+code (or the Dockerfile/workflow) runs `.github/workflows/build-images.yml`,
+which builds **linux/amd64 + linux/arm64** and pushes
+`ghcr.io/neuralnimbus22/order-demo-ui:latest` — same pipeline shape as the
+backend repo.
+
+Then deploy and reach it:
+
+```bash
+kubectl apply -f k8s/order-demo-ui.yaml
+kubectl -n order-demo wait --for=condition=available --timeout=120s deploy/order-demo-ui
+kubectl -n order-demo port-forward svc/order-demo-ui 3000:3000
+# open http://localhost:3000
+```
+
+The manifest wires the BFF to the backend by in-cluster FQDNs
+(`http://<service>.order-demo.svc.cluster.local:<port>`) and takes
+`SESSION_SECRET` from the `order-demo-ui` Secret (a clearly-demo value lives
+in the manifest; rotate it with `kubectl apply` or a secret manager).
+
+**Cookie caveat:** the session cookie is `secure`, so reach the UI via
+**localhost** (port-forward — localhost is a secure context) or HTTPS. A
+bare-IP `http://` LoadBalancer would silently drop the cookie and break
+login. The Service is ClusterIP on purpose; making it shareable later is a
+one-line change *plus* TLS in front.

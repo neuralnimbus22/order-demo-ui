@@ -1,0 +1,111 @@
+# order-demo-ui — the storefront, deployed beside the backend in the
+# order-demo namespace. The BFF reaches every backend service by its
+# in-cluster FQDN (the *_URL envs below); the browser reaches the UI via
+# `kubectl -n order-demo port-forward svc/order-demo-ui 3000:3000`.
+# ClusterIP on purpose — switching to a shareable LoadBalancer later is a
+# one-line change, but mind the session cookie's `secure` flag: reach the UI
+# via localhost (a secure context) or HTTPS, never a bare-IP HTTP URL.
+---
+# Demo-only secret for signing/scoping the UI session. Clearly a placeholder —
+# rotate by editing this value (or `kubectl -n order-demo create secret generic
+# order-demo-ui --from-literal=session-secret=... --dry-run=client -o yaml |
+# kubectl apply -f -`). Real deployments would source this from a secret
+# manager, same trade-off already recorded for the backend's DB credentials.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: order-demo-ui
+  namespace: order-demo
+  labels:
+    app: order-demo-ui
+type: Opaque
+stringData:
+  session-secret: demo-session-secret-not-for-production
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-demo-ui
+  namespace: order-demo
+  labels:
+    app: order-demo-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-demo-ui
+  template:
+    metadata:
+      labels:
+        app: order-demo-ui
+    spec:
+      containers:
+        - name: order-demo-ui
+          image: ghcr.io/neuralnimbus22/order-demo-ui:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            # In-cluster FQDNs — the BFF's only knowledge of the backend.
+            # No AUTH_URL: the UI never calls auth-service (order-service
+            # authorizes orders internally with its own token).
+            - name: ORDER_URL
+              value: http://order.order-demo.svc.cluster.local:3002
+            - name: PAYMENT_URL
+              value: http://payment.order-demo.svc.cluster.local:3004
+            - name: INVENTORY_URL
+              value: http://inventory.order-demo.svc.cluster.local:3003
+            - name: PRODUCT_CATALOG_URL
+              value: http://product-catalog.order-demo.svc.cluster.local:3005
+            - name: USER_SESSION_URL
+              value: http://user-session.order-demo.svc.cluster.local:3006
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: order-demo-ui
+                  key: session-secret
+          resources:
+            # Next.js needs more headroom than the node services (SSR per
+            # request), hence larger bounds than the backend's 100m/250m.
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          # /api/health is liveness-only by design — it never fans out to the
+          # backend, so a broken backend degrades flows without killing the
+          # UI pod (mirrors the backend's inventory /health convention).
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-demo-ui
+  namespace: order-demo
+  labels:
+    app: order-demo-ui
+spec:
+  type: ClusterIP
+  selector:
+    app: order-demo-ui
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
