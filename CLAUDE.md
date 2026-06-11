@@ -163,6 +163,28 @@ service.
   landing until the storefront exists). The header (server component) shows
   Login/Register or email + Logout from the same `getSession()` source of truth.
 
+### As built — storefront + cart (chunk 3)
+
+- BFF routes: `GET /api/products` (list), `GET /api/products/[id]` (single;
+  catalog 404 passes through). Browsing is PUBLIC — the storefront and cart
+  never call `requireSession`; checkout (chunk 4) is the auth gate.
+- Pages: `/` is the storefront (hero + category filter pills + product grid,
+  server-rendered through `lib/backend.listProducts` with a friendly
+  catalog-down state); `/products/[id]` is the detail page (description, price,
+  stock, qty stepper, add-to-cart) with a designed `not-found`; `/cart` is the
+  cart page (qty steppers, remove, live subtotal, proceed-to-checkout);
+  `/checkout` is a placeholder until chunk 4.
+- Cart: `CartProvider` (`lib/cart.tsx`) holds `{sku,name,price,qty}` lines with
+  add/remove/setQty/clear, persisted to localStorage (`sundry-cart-v1`),
+  hydrated only after mount (SSR-safe; `hydrated` flag prevents empty-cart
+  flicker). Header badge shows the live item count.
+- Product images: the catalog has no image URLs, so `components/product-art.tsx`
+  renders a deterministic SVG tile per product — category-tinted gradient, two
+  hash-of-sku-positioned motif circles, product initials. Same sku → same tile
+  everywhere (grid, detail, cart).
+- `lib/format.ts` holds `formatPrice` — kept OUT of `lib/cart.tsx` on purpose:
+  server components can't call exports of a `"use client"` module.
+
 ---
 
 ## Conventions

@@ -5,7 +5,7 @@ import { test, expect } from "@playwright/test";
 
 test("home page renders the brand", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByTestId("brand")).toHaveText("Sundry");
+  await expect(page.getByTestId("header-brand")).toHaveText("Sundry");
 });
 
 test("GET /api/health returns ok", async ({ request }) => {

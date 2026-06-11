@@ -55,14 +55,25 @@ Demo login (seeded by the backend's user-session service): `demo@example.com` /
 
 | path | contents |
 |---|---|
-| `app/` | App Router pages + layouts (`/login`, `/register`, `/account` so far) |
+| `app/` | App Router pages: `/` storefront grid, `/products/[id]` detail, `/cart`, `/checkout` (placeholder), `/login`, `/register`, `/account` |
 | `app/api/**` | the BFF — the only code that talks to backend services |
 | `app/api/auth/*` | `login` (sets the httpOnly session cookie), `register`, `logout`, `me` (validates the cookie against user-session — clears it when stale) |
+| `app/api/products*` | catalog list + single product (404 passes through) |
 | `lib/backend.ts` | typed backend client; reads `*_URL` env vars, never hardcodes URLs |
+| `lib/cart.tsx` | CartProvider — frontend-only cart, persisted to localStorage |
 | `lib/session.ts` / `lib/auth.ts` | cookie name + flags · `getSession()`/`requireSession()` server guards |
-| `components/` | header (auth-aware), auth forms, shared UI |
+| `components/` | header (auth-aware, cart badge), storefront grid, product art tiles, auth forms |
 | `e2e/` | Playwright specs (`playwright.config.ts` at the root) |
 | `.env.example` | the full env-var list with local-dev defaults |
+
+## Storefront notes
+
+Browsing is public — login is only required at checkout. The catalog has no
+image URLs, so each product renders a deterministic, category-tinted SVG art
+tile (`components/product-art.tsx`) keyed off its sku. The cart is purely
+client state persisted to localStorage; there is no backend cart service.
+`e2e/storefront.spec.ts` needs product-catalog reachable
+(`kubectl -n order-demo port-forward svc/product-catalog 3005:3005`).
 
 ## Auth model
 
