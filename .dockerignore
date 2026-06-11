@@ -1,0 +1,16 @@
+# Keep the build context small and reproducible — the build stage installs
+# its own node_modules and produces its own .next.
+node_modules
+.next
+.git
+.gitignore
+e2e
+test-results
+playwright-report
+playwright.config.ts
+Dockerfile
+.dockerignore
+k8s
+.github
+*.md
+.env*

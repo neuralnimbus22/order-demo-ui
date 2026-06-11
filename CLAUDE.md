@@ -222,6 +222,27 @@ Mirror the backend's conventions so it deploys the same way:
 - Reachable by the browser via ingress / LoadBalancer / port-forward (the UI is the one
   component that *is* meant to be reachable from outside the cluster).
 
+### As built — deployment (chunk 3.5)
+
+- **Dockerfile**: multi-stage — build stage runs `npm ci` + `next build`
+  (`output: "standalone"`); runtime is `node:20-alpine`, `USER node`, copies
+  `.next/standalone` + `.next/static` + `public`, `HOSTNAME=0.0.0.0`,
+  `CMD ["node","server.js"]` so SIGTERM hits the server directly. ~245MB.
+- **Pipeline**: `.github/workflows/build-images.yml` mirrors the backend's —
+  buildx + QEMU, `linux/amd64,linux/arm64`, pushes
+  `ghcr.io/neuralnimbus22/order-demo-ui:latest` on pushes to `main` touching
+  app code, the Dockerfile, or the workflow.
+- **Manifest** (`k8s/order-demo-ui.yaml`): Secret (`order-demo-ui`, demo
+  `session-secret`, referenced via `secretKeyRef`) + Deployment + **ClusterIP**
+  Service in namespace `order-demo`, port 3000. The `*_URL` envs carry the
+  in-cluster FQDNs (`http://<svc>.order-demo.svc.cluster.local:<port>`); no
+  `AUTH_URL`. Probes hit `GET /api/health` (liveness-only by design — a broken
+  backend degrades flows, never kills the pod). Resources 100m/128Mi →
+  500m/256Mi.
+- **Reaching it**: `kubectl -n order-demo port-forward svc/order-demo-ui
+  3000:3000` → http://localhost:3000. The session cookie is `secure`, so use
+  localhost or HTTPS — a bare-IP HTTP LoadBalancer would drop the cookie.
+
 **Local dev:** `kubectl port-forward` the five services to their `localhost:<port>` and
 point the `*_URL` envs at them, then `npm run dev`.
 
