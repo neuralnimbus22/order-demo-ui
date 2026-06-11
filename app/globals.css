@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+/* Design tokens — one accent (indigo), stone neutrals, Geist type.
+   The storefront is deliberately light-only: a controlled palette reads as a
+   real store; an unstyled dark-mode flip reads as a demo. */
+:root {
+  --background: #fafaf9; /* stone-50 */
+  --foreground: #1c1917; /* stone-900 */
+  --accent: #4f46e5; /* indigo-600 */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
