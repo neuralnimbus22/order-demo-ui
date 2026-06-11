@@ -148,6 +148,21 @@ backend order calls.
 **Cart** is React state only (optionally persisted to `localStorage`). No backend cart
 service.
 
+### As built — auth (chunk 2)
+
+- BFF routes: `POST /api/auth/login` (sets the cookie), `POST /api/auth/register`
+  (no auto-login; client routes to `/login?registered=1`), `POST /api/auth/logout`
+  (clears the cookie, always 200), `GET /api/auth/me` (validates against
+  user-session `/validate`; clears the cookie on a stale/expired token).
+- Cookie: name `session`, httpOnly, secure, sameSite=lax, path=/, maxAge derived
+  from the JWT `exp` claim (decode-only; `/validate` remains the authority).
+- Protected pages use the server-component guard `requireSession()`
+  (`lib/auth.ts`) rather than middleware: the validate call runs only where a
+  page actually needs auth, and the guard hands the claims straight to the page.
+- Pages: `/login`, `/register`, `/account` (protected placeholder; post-login
+  landing until the storefront exists). The header (server component) shows
+  Login/Register or email + Logout from the same `getSession()` source of truth.
+
 ---
 
 ## Conventions

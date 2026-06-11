@@ -55,11 +55,24 @@ Demo login (seeded by the backend's user-session service): `demo@example.com` /
 
 | path | contents |
 |---|---|
-| `app/` | App Router pages + layouts |
+| `app/` | App Router pages + layouts (`/login`, `/register`, `/account` so far) |
 | `app/api/**` | the BFF — the only code that talks to backend services |
+| `app/api/auth/*` | `login` (sets the httpOnly session cookie), `register`, `logout`, `me` (validates the cookie against user-session — clears it when stale) |
 | `lib/backend.ts` | typed backend client; reads `*_URL` env vars, never hardcodes URLs |
+| `lib/session.ts` / `lib/auth.ts` | cookie name + flags · `getSession()`/`requireSession()` server guards |
+| `components/` | header (auth-aware), auth forms, shared UI |
 | `e2e/` | Playwright specs (`playwright.config.ts` at the root) |
 | `.env.example` | the full env-var list with local-dev defaults |
+
+## Auth model
+
+Login calls user-session through the BFF; the JWT lands in an httpOnly,
+secure, sameSite=lax `session` cookie whose maxAge tracks the token's 1h
+expiry. Protected pages call `requireSession()` (server-side `/validate`
+check → redirect to `/login`). The user JWT gates the UI only — it is never
+forwarded to order-service. `e2e/auth.spec.ts` needs user-session reachable
+(`kubectl -n order-demo port-forward svc/user-session 3006:3006`); the smoke
+spec runs backend-free.
 
 ## Environment variables
 
