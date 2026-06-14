@@ -17,6 +17,12 @@
 #   THREADS=50 DURATION=60 jmeter/run.sh                        # override profile
 #   jmeter/run.sh --include-auth                                # + POST /login load
 #   jmeter/run.sh --report                                     # also write HTML report
+#   jmeter/run.sh --influx                                      # live-stream to in-cluster InfluxDB
+#   INFLUX_URL=http://host:8086/write?db=jmeter jmeter/run.sh    # custom InfluxDB target
+#
+# Live streaming (chunk 11) is ADDITIVE and OFF by default: with no InfluxDB URL
+# the Backend Listener does nothing and the .jtl write + gating below run exactly
+# as before. --influx sets the in-cluster FQDN; INFLUX_URL overrides it.
 #
 # Prereqs: Java + Apache JMeter on PATH (`brew install jmeter`, or download from
 # https://jmeter.apache.org/download_jmeter.cgi). The JMeter binary is NOT
@@ -33,13 +39,24 @@ LOG="$RESULTS_DIR/jmeter.log"
 # --- options ---------------------------------------------------------------
 INCLUDE_AUTH=0
 WRITE_REPORT=0
+USE_INFLUX=0
+# In-cluster InfluxDB FQDN used by --influx (overridable via INFLUX_URL).
+INFLUX_FQDN_URL="http://influxdb.order-demo.svc.cluster.local:8086/write?db=jmeter"
 for arg in "$@"; do
   case "$arg" in
     --include-auth) INCLUDE_AUTH=1 ;;
     --report) WRITE_REPORT=1 ;;
+    --influx) USE_INFLUX=1 ;;
     *) echo "[run.sh] unknown option: $arg" >&2; exit 2 ;;
   esac
 done
+
+# InfluxDB streaming URL passed to the Backend Listener (-Jinflux_url).
+# Precedence: explicit INFLUX_URL env > --influx (FQDN) > empty (no streaming).
+INFLUX_URL="${INFLUX_URL:-}"
+if [ -z "$INFLUX_URL" ] && [ "$USE_INFLUX" -eq 1 ]; then
+  INFLUX_URL="$INFLUX_FQDN_URL"
+fi
 
 # --- prerequisite check ----------------------------------------------------
 if ! command -v jmeter >/dev/null 2>&1; then
@@ -77,10 +94,22 @@ fi
 mkdir -p "$RESULTS_DIR"
 rm -f "$JTL" "$LOG"
 
+# The InfluxDB Backend Listener is disabled by default in the .jmx (an empty
+# influxdbUrl would make its setupTest throw and abort the run). When streaming
+# is requested, enable that one element in a temp copy of the plan; otherwise
+# run the original plan untouched (chunk 10 behavior, listener never loads).
+RUN_JMX="$JMX"
+if [ -n "$INFLUX_URL" ]; then
+  RUN_JMX="$RESULTS_DIR/plan-streaming.jmx"
+  sed '/testname="InfluxDB Backend Listener (live)"/ s/enabled="false"/enabled="true"/' \
+    "$JMX" > "$RUN_JMX"
+fi
+
 echo "=== order-demo-ui BFF load test ==="
 echo "target:   ${scheme}://${host}:${port}  (from E2E_BASE_URL=${E2E_BASE_URL})"
 echo "profile:  threads=${THREADS} rampup=${RAMPUP}s duration=${DURATION}s maxms=${MAXMS}"
 echo "auth load: $([ "$INCLUDE_AUTH" -eq 1 ] && echo "ON (auththreads=${AUTHTHREADS})" || echo "off")"
+echo "streaming: $([ -n "$INFLUX_URL" ] && echo "ON -> ${INFLUX_URL}" || echo "off (no InfluxDB — .jtl only)")"
 echo
 
 REPORT_ARGS=()
@@ -91,12 +120,13 @@ fi
 
 # Force CSV results with a header row so the gate below can find the `success`
 # column by name regardless of the user's global JMeter config.
-jmeter -n -t "$JMX" -l "$JTL" -j "$LOG" \
+jmeter -n -t "$RUN_JMX" -l "$JTL" -j "$LOG" \
   -Jjmeter.save.saveservice.output_format=csv \
   -Jjmeter.save.saveservice.print_field_names=true \
   -Jscheme="$scheme" -Jhost="$host" -Jport="$port" \
   -Jthreads="$THREADS" -Jrampup="$RAMPUP" -Jduration="$DURATION" \
   -Jmaxms="$MAXMS" -Jauththreads="$AUTHTHREADS" \
+  -Jinflux_url="$INFLUX_URL" \
   ${REPORT_ARGS[@]+"${REPORT_ARGS[@]}"}
 
 # --- gate on the .jtl ------------------------------------------------------

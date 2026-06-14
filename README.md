@@ -165,6 +165,10 @@ E2E_BASE_URL=https://shop.example.com npm run test:load  # against a deployed UI
 - **Prereqs:** Java + Apache JMeter on `PATH` (`brew install jmeter`); the binary
   is not vendored. `jmeter/` is XML + shell + markdown, so it never affects
   `npm run build`/`lint`.
+- **Live dashboard (optional):** `bash jmeter/run.sh --influx` streams metrics to
+  InfluxDB 1.x for a provisioned Grafana dashboard you watch in real time — see
+  [`k8s/observability/`](k8s/observability/README.md). Streaming is additive and
+  off by default; the `.jtl` gate above is unchanged when it's off.
 
 ## Storefront notes
 

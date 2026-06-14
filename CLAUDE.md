@@ -341,6 +341,25 @@ Cypress/Selenium suites (next) — and ultimately TestKube — all behave identi
   `MAXMS=0` *disables* JMeter's Duration Assertion (0 = no limit), so it's not a way to
   force failure. Prereq: Java + JMeter on PATH (`brew install jmeter`, not vendored).
   Isolated by file type (XML/shell/markdown) — no effect on `npm run build`/`lint`.
+- **Live load dashboard** (observability, chunk 11) — `k8s/observability/`
+  (namespace `order-demo`): **InfluxDB 1.8** + **Grafana 10.4.3**, both ClusterIP,
+  reached by `kubectl -n order-demo port-forward svc/grafana 3000:3000`.
+  - **InfluxDB pinned 1.x** because JMeter's built-in `InfluxdbBackendListenerClient`
+    speaks the 1.x write API; 2.x breaks it. `INFLUXDB_DB=jmeter` auto-creates the DB.
+  - **Not Prometheus:** JMeter *pushes* metrics; Prometheus *pulls*. Push → InfluxDB 1.x
+    is the native fit.
+  - Grafana is **provisioned as code** (datasource + dashboard-provider + dashboard-JSON
+    ConfigMaps); admin creds from a demo-placeholder Secret. Datasource is **InfluxQL**
+    (not Flux — Flux against 1.x returns no data). Dashboard queries are aligned to the
+    listener's real schema (measurement `jmeter`; tags application/statut/transaction;
+    fields count/avg/pct95.0/meanAT/countError), verified against a live InfluxDB+Grafana.
+  - The JMeter Backend Listener is **additive + disabled by default**: `run.sh` enables it
+    (in a temp copy of the plan) only when streaming is requested (`--influx` / `INFLUX_URL`)
+    and passes `-Jinflux_url`. An *empty* URL makes the listener's setupTest throw and abort
+    the run, so "skip" = listener disabled, NOT empty URL. Streaming never affects the
+    `.jtl` write or the wrapper's pass/fail gate.
+  - `emptyDir` storage (ephemeral demo metrics); manifests validated with
+    `kubectl --dry-run=client` (not applied by me — Lakshmi applies).
 
 ---
 

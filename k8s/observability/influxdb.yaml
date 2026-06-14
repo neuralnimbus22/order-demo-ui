@@ -1,0 +1,84 @@
+# InfluxDB 1.8 — the metrics sink JMeter's Backend Listener pushes to.
+#
+# Pinned to the 1.x line ON PURPOSE: JMeter's built-in
+# InfluxdbBackendListenerClient speaks the InfluxDB 1.x /write line protocol.
+# InfluxDB 2.x changed the API (Flux, /api/v2/write, tokens/orgs/buckets) and
+# breaks the built-in listener — do not bump to 2.x.
+#
+# INFLUXDB_DB=jmeter makes the 1.x image auto-create the `jmeter` database on
+# startup, so the listener's /write?db=jmeter target exists with no init job.
+#
+# Storage is emptyDir: demo metrics are EPHEMERAL (lost on pod restart), which
+# is fine for a live-demo dashboard. Swap to a PVC if you want history to survive.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: influxdb
+  namespace: order-demo
+  labels:
+    app: influxdb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: influxdb
+  template:
+    metadata:
+      labels:
+        app: influxdb
+    spec:
+      containers:
+        - name: influxdb
+          image: influxdb:1.8
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8086
+          env:
+            - name: INFLUXDB_DB
+              value: jmeter
+            - name: INFLUXDB_HTTP_FLUX_ENABLED
+              value: "false"
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8086
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8086
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/influxdb
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb
+  namespace: order-demo
+  labels:
+    app: influxdb
+spec:
+  type: ClusterIP
+  selector:
+    app: influxdb
+  ports:
+    - name: http
+      port: 8086
+      targetPort: 8086

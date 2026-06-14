@@ -1,0 +1,186 @@
+# Grafana provisioning as code — datasource + dashboard provider + dashboard
+# JSON, all mounted into Grafana's provisioning paths so nothing is imported by
+# hand at demo time.
+---
+# Datasource: points at the in-cluster InfluxDB 1.x service, database `jmeter`.
+# version: InfluxQL is REQUIRED — InfluxDB 1.8 speaks InfluxQL, not Flux. A Flux
+# datasource against a 1.x server connects but returns no data (a silent trap).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource
+  namespace: order-demo
+  labels:
+    app: grafana
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: JMeter-InfluxDB
+        uid: jmeter_influxdb
+        type: influxdb
+        access: proxy
+        url: http://influxdb.order-demo.svc.cluster.local:8086
+        database: jmeter
+        isDefault: true
+        editable: true
+        jsonData:
+          version: InfluxQL
+          httpMode: GET
+          timeInterval: "5s"
+---
+# Dashboard provider: load any dashboard JSON found under the mounted path.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: order-demo
+  labels:
+    app: grafana
+data:
+  provider.yaml: |
+    apiVersion: 1
+    providers:
+      - name: jmeter
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        updateIntervalSeconds: 30
+        allowUiUpdates: true
+        options:
+          path: /etc/grafana/dashboards
+          foldersFromFilesStructure: false
+---
+# The JMeter live dashboard (InfluxQL). Queries are aligned to the EXACT schema
+# InfluxdbBackendListenerClient writes (measurement `jmeter`; tags application/
+# statut/transaction; fields count/avg/pct95.0/meanAT/countError), verified
+# against a live InfluxDB 1.8 — not guessed. Aggregate rows use
+# transaction='all' with statut='all'; per-endpoint rows use the sampler names.
+# Datasource is referenced by its provisioned uid (jmeter_influxdb).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-jmeter
+  namespace: order-demo
+  labels:
+    app: grafana
+data:
+  jmeter.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 1,
+      "time": { "from": "now-15m", "to": "now" },
+      "refresh": "5s",
+      "title": "JMeter — order-demo-ui BFF load (live)",
+      "uid": "jmeter-order-demo-ui",
+      "schemaVersion": 39,
+      "tags": ["jmeter", "load", "order-demo-ui"],
+      "templating": { "list": [] },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Active threads (virtual users)",
+          "type": "stat",
+          "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+          "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+              "rawQuery": true,
+              "resultFormat": "time_series",
+              "query": "SELECT mean(\"meanAT\") FROM \"jmeter\" WHERE (\"transaction\" = 'internal') AND $timeFilter GROUP BY time($__interval) fill(null)"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Throughput (requests per interval)",
+          "type": "timeseries",
+          "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+          "gridPos": { "h": 6, "w": 18, "x": 6, "y": 0 },
+          "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 2 }, "unit": "short" }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+              "rawQuery": true,
+              "resultFormat": "time_series",
+              "alias": "requests",
+              "query": "SELECT sum(\"count\") FROM \"jmeter\" WHERE (\"transaction\" = 'all' AND \"statut\" = 'all') AND $timeFilter GROUP BY time($__interval) fill(0)"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Response time (ms) — avg & p95",
+          "type": "timeseries",
+          "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+          "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }, "unit": "ms" }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+              "rawQuery": true,
+              "resultFormat": "time_series",
+              "alias": "avg",
+              "query": "SELECT mean(\"avg\") FROM \"jmeter\" WHERE (\"transaction\" = 'all') AND $timeFilter GROUP BY time($__interval) fill(null)"
+            },
+            {
+              "refId": "B",
+              "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+              "rawQuery": true,
+              "resultFormat": "time_series",
+              "alias": "p95",
+              "query": "SELECT mean(\"pct95.0\") FROM \"jmeter\" WHERE (\"transaction\" = 'all') AND $timeFilter GROUP BY time($__interval) fill(null)"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Errors (per interval)",
+          "type": "timeseries",
+          "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+          "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1 }, "unit": "short", "color": { "mode": "fixed", "fixedColor": "red" } }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+              "rawQuery": true,
+              "resultFormat": "time_series",
+              "alias": "errors",
+              "query": "SELECT sum(\"countError\") FROM \"jmeter\" WHERE (\"transaction\" = 'all' AND \"statut\" = 'all') AND $timeFilter GROUP BY time($__interval) fill(0)"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "title": "Avg response time by endpoint (ms)",
+          "type": "timeseries",
+          "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
+          "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 }, "unit": "ms" }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+              "rawQuery": true,
+              "resultFormat": "time_series",
+              "alias": "$tag_transaction",
+              "query": "SELECT mean(\"avg\") FROM \"jmeter\" WHERE (\"transaction\" =~ /^GET/) AND $timeFilter GROUP BY \"transaction\", time($__interval) fill(null)"
+            }
+          ]
+        }
+      ]
+    }
