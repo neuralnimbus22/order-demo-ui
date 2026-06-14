@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test:e2e": "playwright test",
     "test:cypress": "cypress run",
-    "cypress:open": "cypress open"
+    "cypress:open": "cypress open",
+    "test:selenium": "mocha --config selenium/.mocharc.json"
   },
   "dependencies": {
     "next": "16.2.9",
@@ -20,13 +21,18 @@
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/selenium-webdriver": "^4.35.6",
     "cypress": "^15.17.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "mocha": "^11.7.6",
+    "selenium-webdriver": "^4.44.0",
     "tailwindcss": "^4",
+    "tsx": "^4.22.4",
     "typescript": "^5"
   }
 }

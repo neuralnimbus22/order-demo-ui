@@ -15,6 +15,9 @@ const eslintConfig = defineConfig([
     // Cypress specs are TypeScript but use Cypress globals (cy, Cypress) and
     // their own tsconfig; keep them out of the Next app's lint scope.
     "cypress/**",
+    // Selenium specs (framework #3) likewise live under their own tsconfig +
+    // Mocha runner; keep them out of the Next app's lint scope.
+    "selenium/**",
   ]),
 ]);
 
