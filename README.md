@@ -103,6 +103,29 @@ E2E_BASE_URL=http://localhost:3000 npm run test:e2e     # deployed UI port-forwa
 If the app is not running at `E2E_BASE_URL`, the suite fails to connect — it
 will not silently start one.
 
+### Frameworks
+
+The same user journeys are covered in more than one framework (to mirror how
+TestKube runs any tool against the deployed app). Every framework reads the
+same `E2E_BASE_URL` and assumes the app is already running.
+
+| framework | command | specs |
+|---|---|---|
+| Playwright | `npm run test:e2e` | `e2e/*.spec.ts` |
+| Cypress | `npm run test:cypress` (headless) · `npm run cypress:open` (interactive) | `cypress/e2e/*.cy.ts` |
+
+The Cypress suite is a 1:1 mirror of the Playwright coverage (smoke, auth,
+storefront, checkout, order-status) — same flows, same `data-testid`s, same
+seeded demo login. Both run identically against either run mode above:
+
+```bash
+npm run test:cypress                                  # default localhost:3000
+E2E_BASE_URL=http://localhost:3000 npm run test:cypress   # deployed UI port-forwarded here
+```
+
+Cypress lives under its own `cypress/tsconfig.json` and is excluded from the
+Next `tsconfig`/ESLint scope, so its specs never enter the app build.
+
 ## Storefront notes
 
 Browsing is public — login is only required at checkout. The catalog has no

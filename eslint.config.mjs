@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Cypress specs are TypeScript but use Cypress globals (cy, Cypress) and
+    // their own tsconfig; keep them out of the Next app's lint scope.
+    "cypress/**",
   ]),
 ]);
 
