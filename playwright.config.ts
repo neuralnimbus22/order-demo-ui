@@ -1,10 +1,18 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// UI tests run in two modes:
-//  - local dev: spawns `npm run dev` itself (webServer below)
-//  - in-cluster (TestKube TestWorkflow, later): set PLAYWRIGHT_BASE_URL to the
-//    deployed UI Service and the webServer block is skipped.
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
+// E2E target convention (shared across every UI-test framework — Playwright
+// now, Cypress and Selenium next, all later wired into TestKube):
+//
+//   The app is assumed to be ALREADY RUNNING at E2E_BASE_URL. The harness does
+//   NOT start it. Default target when unset: http://localhost:3000.
+//
+// Local run:    start `npm run dev` (+ the five backend port-forwards the
+//               backend-touching specs need), then `npm run test:e2e`.
+// Deployed run: E2E_BASE_URL=<deployed-ui-url> npm run test:e2e
+//
+// There is intentionally no webServer block — pointing at a running target is
+// the only mode, so Playwright behaves like Cypress/Selenium/TestKube will.
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -22,11 +30,4 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: process.env.PLAYWRIGHT_BASE_URL
-    ? undefined
-    : {
-        command: "npm run dev",
-        url: baseURL,
-        reuseExistingServer: !process.env.CI,
-      },
 });

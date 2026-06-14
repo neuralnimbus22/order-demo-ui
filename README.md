@@ -49,7 +49,7 @@ Demo login (seeded by the backend's user-session service): `demo@example.com` /
 | `npm run build` | production build (standalone output) |
 | `npm run start` | serve the production build |
 | `npm run lint` | ESLint |
-| `npm run test:e2e` | Playwright tests (`e2e/`) — spawns the dev server itself; set `PLAYWRIGHT_BASE_URL` to target an already-running/deployed UI instead |
+| `npm run test:e2e` | Playwright tests (`e2e/`) against an **already-running** app at `E2E_BASE_URL` (default `http://localhost:3000`) — see [End-to-end tests](#end-to-end-tests) |
 
 ## Layout
 
@@ -65,6 +65,43 @@ Demo login (seeded by the backend's user-session service): `demo@example.com` /
 | `components/` | header (auth-aware, cart badge), storefront grid, product art tiles, auth forms |
 | `e2e/` | Playwright specs (`playwright.config.ts` at the root) |
 | `.env.example` | the full env-var list with local-dev defaults |
+
+## End-to-end tests
+
+Every E2E suite (Playwright now; Cypress and Selenium later, then TestKube)
+follows one rule: **the app is already running at `E2E_BASE_URL`; the test
+harness never starts it.** A single shared env var picks the target — default
+`http://localhost:3000` when unset. There is no self-spawned dev server.
+
+**Mode A — local.** Start the app and the backend it calls, then run the suite
+in a second terminal:
+
+```bash
+# terminal 1 — backend port-forwards + the app
+kubectl -n order-demo port-forward svc/order           3002:3002 &
+kubectl -n order-demo port-forward svc/payment         3004:3004 &
+kubectl -n order-demo port-forward svc/inventory       3003:3003 &
+kubectl -n order-demo port-forward svc/product-catalog 3005:3005 &
+kubectl -n order-demo port-forward svc/user-session    3006:3006 &
+npm run dev                       # serves http://localhost:3000
+
+# terminal 2 — run the suite (E2E_BASE_URL defaults to localhost:3000)
+npm run test:e2e
+```
+
+The backend-touching specs (auth, storefront, checkout, order-status) need the
+five services reachable — see each spec header. The smoke spec is backend-free.
+
+**Mode B — against a deployed UI.** Point `E2E_BASE_URL` at the running target
+(e.g. a port-forward of the deployed `order-demo-ui`, or its in-cluster URL
+when run from TestKube):
+
+```bash
+E2E_BASE_URL=http://localhost:3000 npm run test:e2e     # deployed UI port-forwarded here
+```
+
+If the app is not running at `E2E_BASE_URL`, the suite fails to connect — it
+will not silently start one.
 
 ## Storefront notes
 
