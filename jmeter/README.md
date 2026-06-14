@@ -75,6 +75,29 @@ safe to gate a pipeline on `npm run test:load`.
 
 Optional HTML report: `bash jmeter/run.sh --report` → `results/report/index.html`.
 
+## Live streaming to a dashboard (InfluxDB + Grafana)
+
+For real-time graphs during a run, JMeter's Backend Listener can push metrics to
+InfluxDB 1.x, visualized in Grafana. The observability stack lives in
+[`k8s/observability/`](../k8s/observability/README.md).
+
+```bash
+# stream to the in-cluster InfluxDB (run from inside the cluster / TestKube)
+bash jmeter/run.sh --influx
+
+# or point at any InfluxDB 1.x explicitly
+INFLUX_URL=http://influxdb.order-demo.svc.cluster.local:8086/write?db=jmeter npm run test:load
+```
+
+**Additive and off by default — chunk 10 is unaffected.** The Backend Listener
+is `enabled="false"` in `order-demo-load.jmx`; `run.sh` enables it (in a temp
+copy of the plan, under `results/`) **only** when an InfluxDB URL is given, and
+supplies it via `-Jinflux_url`. With streaming off the listener never loads, so
+the `.jtl` write and the pass/fail gate above run exactly as before. (An *empty*
+`influxdbUrl` would make the listener's `setupTest` throw and abort the run —
+which is why "skip" is "listener disabled", not "empty URL".) The listener never
+affects pass/fail; that stays driven by the assertions + the `.jtl` gate.
+
 ## POST endpoints — deliberately limited
 
 - **`POST /api/auth/login`** — an authenticated-flow load group exists but is

@@ -23,6 +23,15 @@
   Assertions (Response Code 200 + Duration < maxms) make this a TEST, not a
   benchmark. NOTE: JMeter's CLI exits 0 even when assertions fail, so
   jmeter/run.sh does the pass/fail gating by inspecting the .jtl success column.
+
+  LIVE STREAMING (chunk 11): a Backend Listener (InfluxdbBackendListenerClient)
+  pushes real-time metrics to InfluxDB 1.x for a Grafana dashboard. It is
+  ADDITIVE and DISABLED BY DEFAULT — jmeter/run.sh enables it (in a temp copy of
+  this plan) only when streaming is requested (the influx flag / INFLUX_URL env)
+  and supplies the InfluxDB URL via -Jinflux_url
+  (http://influxdb.order-demo.svc.cluster.local:8086/write?db=jmeter). With
+  streaming off the listener never loads, so the .jtl write + wrapper gating are
+  unchanged.
 -->
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
   <hashTree>
@@ -184,6 +193,70 @@
           <hashTree/>
         </hashTree>
       </hashTree>
+
+      <!-- ====== Live streaming to InfluxDB 1.x (chunk 11) — ADDITIVE + SKIPPABLE ======
+           InfluxdbBackendListenerClient speaks the InfluxDB 1.x write API.
+           DISABLED BY DEFAULT (enabled="false") on purpose: an empty influxdbUrl makes
+           the listener's setupTest throw and abort the run, so "skip" can't be an empty
+           URL. Instead jmeter/run.sh ENABLES this element (in a temp copy of the plan)
+           only when streaming is requested (the influx flag / INFLUX_URL), and passes the
+           InfluxDB FQDN via -Jinflux_url. With streaming off the listener never loads, so
+           the local .jtl run + wrapper gating (chunk 10) are byte-for-byte unaffected.
+           This listener never affects pass/fail — that stays driven by assertions + the
+           wrapper's .jtl gate. -->
+      <BackendListener guiclass="BackendListenerGui" testclass="BackendListener" testname="InfluxDB Backend Listener (live)" enabled="false">
+        <elementProp name="arguments" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+          <collectionProp name="Arguments.arguments">
+            <elementProp name="influxdbMetricsSender" elementType="Argument">
+              <stringProp name="Argument.name">influxdbMetricsSender</stringProp>
+              <stringProp name="Argument.value">org.apache.jmeter.visualizers.backend.influxdb.HttpMetricsSender</stringProp>
+              <stringProp name="Argument.metadata">=</stringProp>
+            </elementProp>
+            <elementProp name="influxdbUrl" elementType="Argument">
+              <stringProp name="Argument.name">influxdbUrl</stringProp>
+              <stringProp name="Argument.value">${__P(influx_url,)}</stringProp>
+              <stringProp name="Argument.metadata">=</stringProp>
+            </elementProp>
+            <elementProp name="application" elementType="Argument">
+              <stringProp name="Argument.name">application</stringProp>
+              <stringProp name="Argument.value">order-demo-ui</stringProp>
+              <stringProp name="Argument.metadata">=</stringProp>
+            </elementProp>
+            <elementProp name="measurement" elementType="Argument">
+              <stringProp name="Argument.name">measurement</stringProp>
+              <stringProp name="Argument.value">jmeter</stringProp>
+              <stringProp name="Argument.metadata">=</stringProp>
+            </elementProp>
+            <elementProp name="summaryOnly" elementType="Argument">
+              <stringProp name="Argument.name">summaryOnly</stringProp>
+              <stringProp name="Argument.value">false</stringProp>
+              <stringProp name="Argument.metadata">=</stringProp>
+            </elementProp>
+            <elementProp name="samplersRegex" elementType="Argument">
+              <stringProp name="Argument.name">samplersRegex</stringProp>
+              <stringProp name="Argument.value">.*</stringProp>
+              <stringProp name="Argument.metadata">=</stringProp>
+            </elementProp>
+            <elementProp name="percentiles" elementType="Argument">
+              <stringProp name="Argument.name">percentiles</stringProp>
+              <stringProp name="Argument.value">90;95;99</stringProp>
+              <stringProp name="Argument.metadata">=</stringProp>
+            </elementProp>
+            <elementProp name="testTitle" elementType="Argument">
+              <stringProp name="Argument.name">testTitle</stringProp>
+              <stringProp name="Argument.value">order-demo-ui BFF load</stringProp>
+              <stringProp name="Argument.metadata">=</stringProp>
+            </elementProp>
+            <elementProp name="eventsPerSecond" elementType="Argument">
+              <stringProp name="Argument.name">eventsPerSecond</stringProp>
+              <stringProp name="Argument.value">5</stringProp>
+              <stringProp name="Argument.metadata">=</stringProp>
+            </elementProp>
+          </collectionProp>
+        </elementProp>
+        <stringProp name="classname">org.apache.jmeter.visualizers.backend.influxdb.InfluxdbBackendListenerClient</stringProp>
+      </BackendListener>
+      <hashTree/>
 
     </hashTree>
   </hashTree>
