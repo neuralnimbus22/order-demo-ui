@@ -138,6 +138,34 @@ headless Chrome. The chromedriver is resolved automatically by **Selenium Manage
 (bundled with selenium-webdriver) — no driver path to install, so it runs the same
 in CI/TestKube as locally; it does need a Chrome/Chromium browser present.
 
+### Load testing (JMeter)
+
+A different test *type* from the functional suites: concurrent HTTP **load**
+against the BFF API routes, to show the app holds under traffic. Full details in
+[`jmeter/README.md`](jmeter/README.md).
+
+```bash
+npm run test:load                                        # default: 20 threads, 30s
+THREADS=50 DURATION=60 npm run test:load                 # override the profile
+E2E_BASE_URL=https://shop.example.com npm run test:load  # against a deployed UI
+```
+
+- **What it loads:** the BFF entry points (not the backend directly) —
+  `GET /api/products` (fans out to product-catalog through the BFF) and
+  `GET /api/health` (cheap baseline). `POST /api/auth/login` is an **opt-in**
+  group (`bash jmeter/run.sh --include-auth`, off by default); `POST /api/checkout`
+  is intentionally **not** loaded — it places real orders and would pollute the
+  system the other suites run against.
+- **Targeting:** same `E2E_BASE_URL` convention — `jmeter/run.sh` parses it into
+  the `scheme/host/port` JMeter needs; the app is assumed already running.
+- **Pass/fail:** each request has Response-Code-200 + Duration(`MAXMS`, default
+  1500ms) assertions. JMeter's CLI exits 0 even on assertion failures, so
+  `run.sh` inspects the `.jtl` and **exits non-zero if any sample failed** — so
+  it can gate a pipeline.
+- **Prereqs:** Java + Apache JMeter on `PATH` (`brew install jmeter`); the binary
+  is not vendored. `jmeter/` is XML + shell + markdown, so it never affects
+  `npm run build`/`lint`.
+
 ## Storefront notes
 
 Browsing is public — login is only required at checkout. The catalog has no

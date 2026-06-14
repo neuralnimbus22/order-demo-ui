@@ -10,7 +10,8 @@
     "test:e2e": "playwright test",
     "test:cypress": "cypress run",
     "cypress:open": "cypress open",
-    "test:selenium": "mocha --config selenium/.mocharc.json"
+    "test:selenium": "mocha --config selenium/.mocharc.json",
+    "test:load": "bash jmeter/run.sh"
   },
   "dependencies": {
     "next": "16.2.9",

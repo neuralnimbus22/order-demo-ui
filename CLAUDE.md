@@ -326,6 +326,21 @@ Cypress/Selenium suites (next) — and ultimately TestKube — all behave identi
   poll). One deliberate `getAttribute("textContent")` on the brand check: Selenium's
   `getText()` returns CSS-`text-transform`-rendered text ("SUNDRY"), so the DOM text is
   read to match PW/Cypress's `textContent` comparison ("Sundry").
+- **JMeter** (load test TYPE, chunk 10) — `jmeter/order-demo-load.jmx` + `jmeter/run.sh`,
+  `npm run test:load`. NOT functional UI: concurrent HTTP load on the BFF entry points.
+  Loads `GET /api/products` (fans out to product-catalog) + `GET /api/health` (baseline);
+  `POST /api/auth/login` is opt-in (`run.sh --include-auth`, `auththreads=0` default);
+  `POST /api/checkout` is **intentionally not loaded** — it places real correlation-id
+  orders and would pollute the system under test. Same `E2E_BASE_URL` source of truth:
+  `run.sh` parses it into `-Jscheme/-Jhost/-Jport`; the app is assumed already running.
+  Profile is property-driven (`-Jthreads/-Jrampup/-Jduration/-Jmaxms`, demo defaults
+  20/10/30/1500). Per-sampler Response-Code-200 + Duration assertions make it a TEST.
+  **Gating gotcha (closed):** JMeter's CLI exits 0 even when assertions fail, so `run.sh`
+  inspects the `.jtl` `success` column and exits non-zero on any failure / zero samples —
+  verified with a forced-failure negative test (`MAXMS=1` → exit 1; pass → exit 0). Note
+  `MAXMS=0` *disables* JMeter's Duration Assertion (0 = no limit), so it's not a way to
+  force failure. Prereq: Java + JMeter on PATH (`brew install jmeter`, not vendored).
+  Isolated by file type (XML/shell/markdown) — no effect on `npm run build`/`lint`.
 
 ---
 
