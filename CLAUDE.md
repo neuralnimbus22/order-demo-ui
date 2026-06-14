@@ -185,6 +185,38 @@ service.
 - `lib/format.ts` holds `formatPrice` — kept OUT of `lib/cart.tsx` on purpose:
   server components can't call exports of a `"use client"` module.
 
+### As built — checkout (chunk 4)
+
+- **The correlation-id flow lives in `app/api/checkout/route.ts` (POST), server-side.**
+  Per cart line: `id = randomUUID()` → `placeOrder({id,sku,qty})` →
+  `confirmPayment({id, amount})` with the **same id**. `amount` is re-derived
+  from the catalog price (`getProduct(sku)`), not the client's — the browser
+  can't dictate the charge. Lines run sequentially and independently; one
+  line's failure never aborts the others. The route is session-gated but the
+  user JWT is NEVER forwarded to order/payment.
+- **Partial-failure taxonomy** (each line returns a status; an id is recorded
+  the moment any call is attempted, so an order is never lost):
+  - `/orders` 404/400, or opaque `502 "upstream dependency unavailable"`, or
+    catalog price lookup fails → `rejected` (no event will arrive; not trackable).
+  - `/orders` ok, `/payments` 502/503 → `processing` (uncertain; trackable).
+  - `/orders` ok, `/payments` otherwise fails → `payment-unconfirmed`
+    (order placed, will sit in waitingFor; trackable). Order is never retried.
+  - `502 "kafka publish failed"`/`503` on `/orders` → `processing` (uncertain;
+    trackable). Both ok → `placed`.
+- **Order id persistence (hand-off to chunk 5):** results are written to
+  localStorage `sundry-orders-v1` (`lib/orders.ts`) — sibling of the cart store,
+  since there's no backend order-history service. Each row carries the
+  correlation id, checkout-time status, `trackable`, and a `batchId`.
+- **Pages:** `/checkout` is now protected (`requireSession`) and renders
+  `components/checkout-client.tsx` (cart review + summary + Place order). On
+  submit it persists the batch, clears the cart, and routes to
+  `/orders?placed=<batchId>`. `/orders` (`orders-list.tsx`) is the confirmation
+  + list; `/orders/[id]` (`order-detail.tsx`) is the per-order status view that
+  polls `GET /api/orders/[id]/status` (→ inventory `/fulfilled/:id`) every 2s
+  until fulfilled. **Chunk 5 owns the rich convergence timeline**; chunk 4's
+  status view is the minimal trackable surface + the shared
+  `order-status-badge.tsx`. Header gains an "Orders" link when logged in.
+
 ---
 
 ## Conventions
