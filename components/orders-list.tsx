@@ -12,6 +12,17 @@ import { readOrders, type PlacedOrder } from "@/lib/orders";
 import { formatPrice } from "@/lib/format";
 import OrderStatusBadge, { badgeFor } from "@/components/order-status-badge";
 
+function fmtPlaced(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "recently";
+  return d.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export default function OrdersList() {
   const placedBatch = useSearchParams().get("placed");
   const [orders, setOrders] = useState<PlacedOrder[] | null>(null);
@@ -96,6 +107,9 @@ export default function OrdersList() {
                     className="mt-0.5 truncate font-mono text-xs text-stone-500"
                   >
                     {order.id}
+                  </p>
+                  <p className="mt-0.5 text-xs text-stone-400">
+                    Placed {fmtPlaced(order.placedAt)}
                   </p>
                 </div>
                 <div className="flex items-center gap-4">

@@ -93,10 +93,21 @@ runs — per cart line, server-side — a fresh correlation `id` → `POST /orde
 price). An order is only "fulfilled" once inventory has seen both the
 order-placed and payment-confirmed events for that id, so building the payment
 half is non-negotiable. Placed ids are saved to localStorage (`sundry-orders-v1`)
-and surfaced at `/orders` (confirmation + list) and `/orders/[id]` (status,
-polling `/fulfilled/:id`). `e2e/checkout.spec.ts` exercises the whole chain and
-needs all five services port-forwarded (user-session, product-catalog, order,
-payment, inventory — see the spec header).
+and surfaced at `/orders` (confirmation + list) and `/orders/[id]`.
+`e2e/checkout.spec.ts` exercises the whole chain and needs all five services
+port-forwarded (user-session, product-catalog, order, payment, inventory — see
+the spec header).
+
+## Order status (the convergence view)
+
+`/orders/[id]` polls `/api/orders/[id]/status` (→ inventory `/fulfilled/:id`)
+and renders the lifecycle as a live timeline: **order placed → payment
+confirmed → fulfilled**. Step states and the header badge both read the same
+`Fulfillment` (`waitingFor` is honored literally, not inferred), so they stay
+in lockstep. Polling stops on `fulfilled`; a `rejected` order never polls and
+shows a terminal "couldn't be placed" state from its stored status.
+`e2e/order-status.spec.ts` covers a real order converging to fulfilled and a
+synthetic (localStorage-seeded) rejected order that must not poll.
 
 ## Environment variables
 

@@ -217,6 +217,32 @@ service.
   status view is the minimal trackable surface + the shared
   `order-status-badge.tsx`. Header gains an "Orders" link when logged in.
 
+### As built — order status / convergence view (chunk 5)
+
+- **`/orders/[id]` is the rich convergence view.** `components/order-detail.tsx`
+  keeps chunk 4's poll engine **verbatim** (the `useEffect`: `active` flag +
+  `clearTimeout` cleanup, **stop-on-fulfilled**, **skip when `!trackable`**) and
+  only upgrades the rendered presentation around it.
+- **Timeline** (`components/order-timeline.tsx`): three lifecycle steps —
+  order placed → payment confirmed → fulfilled. Each step's state is derived
+  from the **same live `Fulfillment`** the badge reads, using `waitingFor`
+  honestly (`waitingFor.includes("payment-confirmed")` → that step is the
+  active/waiting one) rather than inferring — so the timeline and
+  `order-status-badge.tsx` can never disagree on screen. `data-state` of
+  `done`/`active`/`idle` per step.
+- **Terminal states:** `fulfilled` → emerald success block, polling already
+  stopped. `rejected` → red "couldn't be placed" block rendered **purely from
+  the stored `order.status`/`order.detail`** (no poll ever runs for a
+  non-trackable order). `payment-unconfirmed`/`processing` → keep polling and
+  surface the stored `detail` honestly alongside the live timeline.
+- **`/orders` list** (`orders-list.tsx`) gains a placed-at timestamp; the
+  `?placed=<batchId>` post-checkout confirmation behavior is unchanged.
+- BFF status route (`/api/orders/[id]/status` → `getFulfillment`) and the
+  `getFulfillment` 404-normalization are consumed as-is, not modified.
+- **CI:** `build-images.yml` actions bumped to the Node-24-era majors
+  (`checkout@v6`, `login-action@v4`, `setup-qemu-action@v4`,
+  `setup-buildx-action@v4`, `build-push-action@v7`); inputs/behavior identical.
+
 ---
 
 ## Conventions
