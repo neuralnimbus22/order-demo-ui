@@ -17,6 +17,7 @@
 /cypress/videos/
 /cypress/screenshots/
 /cypress/downloads/
+/jmeter/results/
 
 # next.js
 /.next/
