@@ -303,6 +303,29 @@ Cypress/Selenium suites (next) — and ultimately TestKube — all behave identi
   4s default would flake against the real backend); `cy.getCookie('session')` for cookie
   checks; `cy.visit(url, { onBeforeLoad })` to seed the synthetic rejected-order
   localStorage fixture before app scripts run.
+- **Selenium** (framework #3, chunk 9) — `selenium/*.test.ts`, `npm run test:selenium`.
+  Node/TS (`selenium-webdriver` + Mocha + `tsx`), headless Chrome, chromedriver
+  resolved by **Selenium Manager** (no hardcoded path → CI/TestKube-portable).
+  `selenium/driver.ts` reads `process.env.E2E_BASE_URL ?? "http://localhost:3000"` and
+  never starts the app. Same **1:1 mirror** of the 19 flows; no app-code changes.
+  Isolation mirrors Cypress: own `selenium/tsconfig.json` + scoped `selenium/.mocharc.json`,
+  and `selenium` excluded from the root `tsconfig.json` + ESLint `globalIgnores`. Test
+  files are `*.test.ts` so they can't collide with PW's `./e2e` testDir or Cypress's
+  `*.cy.ts` pattern.
+- Framework-behavior parity notes (Selenium ⇄ PW/Cypress): **no auto-wait**, so every
+  visibility/navigation/text/attribute assertion goes through an explicit `WebDriverWait`
+  helper in `driver.ts` (the #1 Selenium flake source, wrapped once); explicit 20s waits
+  for the convergence steps; `driver.manage().getCookies()` for the session-cookie check;
+  rejected-order localStorage seeded by navigate → `executeScript` → `refresh`. **Two
+  assertions are outcome-based rather than network-based** (raw Selenium can't cleanly
+  intercept/count XHRs): (1) the checkout happy path asserts the user-visible
+  confirmation + non-empty order id + cleared cart instead of `/api/checkout` 200; (2) the
+  rejected "no-poll" case asserts **state stability** — `terminal-rejected` is present at
+  t=0 **and still present after a ~2.5s settle** with no timeline ever appearing (a
+  non-trackable order can't transition, so "it didn't flip" is the evidence it didn't
+  poll). One deliberate `getAttribute("textContent")` on the brand check: Selenium's
+  `getText()` returns CSS-`text-transform`-rendered text ("SUNDRY"), so the DOM text is
+  read to match PW/Cypress's `textContent` comparison ("Sundry").
 
 ---
 

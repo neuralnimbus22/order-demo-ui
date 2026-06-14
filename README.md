@@ -68,9 +68,9 @@ Demo login (seeded by the backend's user-session service): `demo@example.com` /
 
 ## End-to-end tests
 
-Every E2E suite (Playwright now; Cypress and Selenium later, then TestKube)
-follows one rule: **the app is already running at `E2E_BASE_URL`; the test
-harness never starts it.** A single shared env var picks the target — default
+Every E2E suite (Playwright, Cypress, Selenium — and later TestKube) follows
+one rule: **the app is already running at `E2E_BASE_URL`; the test harness never
+starts it.** A single shared env var picks the target — default
 `http://localhost:3000` when unset. There is no self-spawned dev server.
 
 **Mode A — local.** Start the app and the backend it calls, then run the suite
@@ -113,18 +113,30 @@ same `E2E_BASE_URL` and assumes the app is already running.
 |---|---|---|
 | Playwright | `npm run test:e2e` | `e2e/*.spec.ts` |
 | Cypress | `npm run test:cypress` (headless) · `npm run cypress:open` (interactive) | `cypress/e2e/*.cy.ts` |
+| Selenium | `npm run test:selenium` (headless Chrome) | `selenium/*.test.ts` |
 
-The Cypress suite is a 1:1 mirror of the Playwright coverage (smoke, auth,
-storefront, checkout, order-status) — same flows, same `data-testid`s, same
-seeded demo login. Both run identically against either run mode above:
+The Cypress and Selenium suites are 1:1 mirrors of the Playwright coverage —
+**the same 19 flows** (smoke 2, auth 6, storefront 5, checkout 4, order-status 2),
+same `data-testid`s, same seeded demo login. Each reads the same `E2E_BASE_URL`
+and runs identically against either run mode above:
 
 ```bash
-npm run test:cypress                                  # default localhost:3000
-E2E_BASE_URL=http://localhost:3000 npm run test:cypress   # deployed UI port-forwarded here
+npm run test:cypress                                       # default localhost:3000
+E2E_BASE_URL=http://localhost:3000 npm run test:cypress    # deployed UI port-forwarded here
+
+npm run test:selenium                                      # default localhost:3000
+E2E_BASE_URL=http://localhost:3000 npm run test:selenium   # deployed UI port-forwarded here
 ```
 
-Cypress lives under its own `cypress/tsconfig.json` and is excluded from the
-Next `tsconfig`/ESLint scope, so its specs never enter the app build.
+Each framework is isolated from the Next build: Cypress under its own
+`cypress/tsconfig.json`, Selenium under `selenium/tsconfig.json` + a scoped
+`selenium/.mocharc.json` — both excluded from the Next `tsconfig`/ESLint scope,
+so their specs never enter `npm run build` or `npm run lint`.
+
+**Selenium runtime:** `selenium-webdriver` (Node/TS, run by Mocha via `tsx`) drives
+headless Chrome. The chromedriver is resolved automatically by **Selenium Manager**
+(bundled with selenium-webdriver) — no driver path to install, so it runs the same
+in CI/TestKube as locally; it does need a Chrome/Chromium browser present.
 
 ## Storefront notes
 

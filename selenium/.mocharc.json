@@ -1,0 +1,5 @@
+{
+  "spec": "selenium/**/*.test.ts",
+  "timeout": 60000,
+  "node-option": ["import=tsx"]
+}
