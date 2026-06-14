@@ -284,6 +284,26 @@ Cypress/Selenium suites (next) — and ultimately TestKube — all behave identi
 - `PLAYWRIGHT_BASE_URL` was fully removed (no alias) so there is a single source
   of truth. New frameworks must read `E2E_BASE_URL`, not invent their own var.
 
+### E2E frameworks on the convention
+
+- **Playwright** (framework #1) — `e2e/*.spec.ts`, `npm run test:e2e`.
+- **Cypress** (framework #2, chunk 8) — `cypress/e2e/*.cy.ts`, `npm run test:cypress`
+  (headless) / `npm run cypress:open`. `cypress.config.ts` sets
+  `e2e.baseUrl = process.env.E2E_BASE_URL ?? "http://localhost:3000"` and has **no**
+  dev-server config (Cypress never starts the app; it verifies `baseUrl` is reachable
+  at startup, which enforces "already running"). The Cypress specs are a **1:1 mirror**
+  of the Playwright coverage — same flows, same `data-testid`s, same seeded demo login;
+  no new test logic, no app-code changes (every testid they need already existed).
+- **Build isolation:** Cypress has its own `cypress/tsconfig.json` (Cypress + node
+  types) and `cypress/**` is excluded from the root `tsconfig.json` and the ESLint
+  `globalIgnores`, so Cypress specs never enter `npm run build` or `npm run lint`.
+- Framework-behavior parity notes (Cypress ⇄ Playwright): `cy.intercept` + alias for
+  network assertions (incl. asserting the status-poll alias has **zero** calls for the
+  rejected order); explicit `{ timeout: 20000 }` on convergence assertions (Cypress's
+  4s default would flake against the real backend); `cy.getCookie('session')` for cookie
+  checks; `cy.visit(url, { onBeforeLoad })` to seed the synthetic rejected-order
+  localStorage fixture before app scripts run.
+
 ---
 
 ## Deployment
