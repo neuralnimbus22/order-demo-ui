@@ -267,6 +267,23 @@ checkout (the correlation-id path), and order status reaching `fulfilled`. Inten
 resilient selectors. Tests live in `tests/` (or `e2e/`) and have their own config so the
 UI repo carries its own UI-test pipeline, separate from the backend's CI.
 
+### Shared E2E target convention (chunk 7) — all frameworks inherit this
+
+There is **one** way every E2E suite finds the app, so Playwright (now) and the
+Cypress/Selenium suites (next) — and ultimately TestKube — all behave identically:
+
+- **One env var: `E2E_BASE_URL`.** Every framework reads it for its target.
+  Default when unset: `http://localhost:3000`.
+- **The app is assumed already running at `E2E_BASE_URL`. The harness never
+  starts it.** Playwright's `webServer` self-spawn was removed in chunk 7 — this
+  is the whole point: a test runner must not behave differently locally than it
+  does in-cluster, where TestKube points it at a deployed URL via env.
+- Two run modes: (a) local — developer runs `npm run dev` + the five backend
+  port-forwards, then the suite; (b) deployed — `E2E_BASE_URL=<url>` → the suite
+  hits the running UI. Documented in `README.md` → "End-to-end tests".
+- `PLAYWRIGHT_BASE_URL` was fully removed (no alias) so there is a single source
+  of truth. New frameworks must read `E2E_BASE_URL`, not invent their own var.
+
 ---
 
 ## Deployment
