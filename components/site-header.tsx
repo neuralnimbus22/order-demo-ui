@@ -24,6 +24,13 @@ export default async function SiteHeader() {
           {session ? (
             <>
               <Link
+                href="/orders"
+                data-testid="header-orders"
+                className="font-medium text-stone-600 transition-colors hover:text-stone-900"
+              >
+                Orders
+              </Link>
+              <Link
                 href="/account"
                 data-testid="header-email"
                 className="font-medium text-stone-600 transition-colors hover:text-stone-900"

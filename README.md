@@ -85,6 +85,19 @@ forwarded to order-service. `e2e/auth.spec.ts` needs user-session reachable
 (`kubectl -n order-demo port-forward svc/user-session 3006:3006`); the smoke
 spec runs backend-free.
 
+## Checkout (the correlation-id flow)
+
+`/checkout` is protected. On "Place order", the BFF route `app/api/checkout`
+runs — per cart line, server-side — a fresh correlation `id` → `POST /orders`
+→ `POST /payments` with the **same id** (amount re-derived from the catalog
+price). An order is only "fulfilled" once inventory has seen both the
+order-placed and payment-confirmed events for that id, so building the payment
+half is non-negotiable. Placed ids are saved to localStorage (`sundry-orders-v1`)
+and surfaced at `/orders` (confirmation + list) and `/orders/[id]` (status,
+polling `/fulfilled/:id`). `e2e/checkout.spec.ts` exercises the whole chain and
+needs all five services port-forwarded (user-session, product-catalog, order,
+payment, inventory — see the spec header).
+
 ## Environment variables
 
 `ORDER_URL`, `PAYMENT_URL`, `INVENTORY_URL`, `PRODUCT_CATALOG_URL`,
