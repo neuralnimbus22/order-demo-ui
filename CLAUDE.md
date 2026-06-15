@@ -360,6 +360,26 @@ Cypress/Selenium suites (next) — and ultimately TestKube — all behave identi
     `.jtl` write or the wrapper's pass/fail gate.
   - `emptyDir` storage (ephemeral demo metrics); manifests validated with
     `kubectl --dry-run=client` (not applied by me — Lakshmi applies).
+- **Gatling** (second load tool, Scala DSL, chunk 12) — `gatling/`,
+  `npm run test:load:gatling`. Showroom sibling to JMeter: same endpoints
+  (`GET /api/products` + `GET /api/health`), JMeter-matched defaults
+  (`USERS=20 RAMP=10 DURATION=30 MAXMS=1500`), same posture (GETs by default,
+  `POST /api/auth/login` opt-in via `--include-auth`, `POST /api/checkout` never
+  loaded). The contrast is *how it's authored*: Scala code vs JMeter's XML.
+  - **Maven + gatling-maven-plugin**, version PINNED in `gatling/pom.xml`
+    (gatling-maven-plugin 4.16.3, gatling-charts-highcharts 3.13.5,
+    scala-maven-plugin 4.9.2) so CI/TestKube get the exact tool — not a floating
+    brew bundle. `gatling:test` needs the Scala compiled first, so `run.sh` runs
+    `mvn test-compile gatling:test` (scala-maven-plugin bound to test-compile).
+  - **Gating is the tool's own exit code:** Gatling assertions (zero failed
+    requests + p95 < `MAXMS`) fail the build natively, so `mvn gatling:test`
+    exits non-zero on breach — no `.jtl`-parsing wrapper like JMeter needs.
+    Verified: `MAXMS=1` → p95 assertion false → exit 1.
+  - Reads `E2E_BASE_URL` (base URL directly, no scheme/host/port split). Batch
+    only — native HTML report → `gatling/results/` (gitignored); **no live
+    InfluxDB wiring this tool**. Prereq: JDK 17+ and Maven (`brew install maven`),
+    Gatling pulled by Maven, not vendored. The Scala/JVM toolchain is contained
+    in `gatling/` — no effect on `npm run build`/`lint`.
 
 ---
 

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Gatling load test for order-demo-ui — the second load tool (Scala DSL), a
+  showroom sibling to the JMeter plan in jmeter/. Maven + gatling-maven-plugin
+  so the Gatling version is PINNED (CI/TestKube get the exact tool, unlike a
+  floating brew bundle). `mvn gatling:test` fails the build natively when a
+  Gatling assertion breaches, so the gate is the tool's own exit code — no
+  results-parsing wrapper needed. The whole JVM/Scala toolchain lives here under
+  gatling/, invisible to `npm run build`/`lint`.
+
+  Versions verified present on Maven Central before pinning.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.neuralnimbus</groupId>
+  <artifactId>order-demo-ui-gatling</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>17</maven.compiler.release>
+    <gatling.version>3.13.5</gatling.version>
+    <gatling-maven-plugin.version>4.16.3</gatling-maven-plugin.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.gatling.highcharts</groupId>
+      <artifactId>gatling-charts-highcharts</artifactId>
+      <version>${gatling.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- Compiles the Scala simulations (src/test/scala) — the gatling-maven
+           plugin runs them but does not compile them. Bound to test-compile, so
+           `mvn test-compile gatling:test` produces the classes then runs. -->
+      <plugin>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <version>4.9.2</version>
+        <executions>
+          <execution>
+            <id>scala-test-compile</id>
+            <phase>test-compile</phase>
+            <goals>
+              <goal>testCompile</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>io.gatling</groupId>
+        <artifactId>gatling-maven-plugin</artifactId>
+        <version>${gatling-maven-plugin.version}</version>
+        <configuration>
+          <!-- HTML report (and simulation.log) land here — gitignored. -->
+          <resultsFolder>${project.basedir}/results</resultsFolder>
+          <!-- Propagate -Dusers/-Dramp/-Dduration/-Dmaxms/-DE2E_BASE_URL from the
+               mvn JVM into the forked Gatling JVM so the simulation reads them. -->
+          <propagateSystemProperties>true</propagateSystemProperties>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
