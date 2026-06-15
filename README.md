@@ -230,6 +230,35 @@ E2E_BASE_URL=https://shop.example.com npm run test:a11y   # against a deployed U
 - **It surfaces real issues by design** — this chunk *adds the audit*, it doesn't
   fix findings. See the chunk-13 PR for the current results.
 
+### SAST (Semgrep)
+
+Static security analysis of the **app source** — Semgrep reads the code for
+vulnerable patterns. It does **not** run the app or use `E2E_BASE_URL` (this is
+source-time security, independent of the test-target convention). Full details
+in [`semgrep/README.md`](semgrep/README.md).
+
+```bash
+npm run test:sast      # or: bash semgrep/run.sh
+```
+
+- **What it scans:** the shipped app source — `app/` (incl. BFF routes under
+  `app/api/**`), `lib/`, `components/`. The test suites, `node_modules`, `.next`,
+  `public`, and `k8s` are excluded (SAST is the app you ship, not harnesses or
+  deploy YAML).
+- **Rulesets:** the Semgrep registry packs `p/typescript`, `p/javascript`,
+  `p/react`, `p/nextjs`, `p/security-audit`, `p/secrets`.
+- **Severity gate:** exits non-zero **only on `ERROR`** findings
+  (`GATED_SEVERITY` in `run.sh`); `WARNING`/`INFO` are reported, not gated.
+  (Many security rules are `WARNING`, so they're reported — widen the constant
+  to gate them.)
+- **Runner:** a **pinned Semgrep container** (`semgrep/semgrep:1.97.0`) via
+  Docker — version fixed in the image tag, isolated from `npm run build`/`lint`.
+  A scan that can't complete (bad config / no registry network) fails loudly,
+  never silently green.
+- **Source-vs-image security split:** Semgrep is *source-time* (patterns in the
+  code); **Trivy** (next chunk) is *artifact-time* (known CVEs in the built
+  image). Together they're the full security story.
+
 ## Storefront notes
 
 Browsing is public — login is only required at checkout. The catalog has no
