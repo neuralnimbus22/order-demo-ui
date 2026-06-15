@@ -202,6 +202,34 @@ E2E_BASE_URL=https://shop.example.com npm run test:load:gatling  # against a dep
   vendored. The Scala/JVM toolchain lives entirely under `gatling/`, so it never
   affects `npm run build`/`lint`.
 
+### Accessibility (axe)
+
+A different test *type* again: automated **WCAG accessibility** auditing with
+[`@axe-core/playwright`](https://www.npmjs.com/package/@axe-core/playwright),
+run through the existing Playwright setup (so it reads the same `E2E_BASE_URL`
+and assumes the app is already running).
+
+```bash
+npm run test:a11y                                    # default localhost:3000
+E2E_BASE_URL=https://shop.example.com npm run test:a11y   # against a deployed UI
+```
+
+- **What it audits:** `e2e/a11y.spec.ts` scans the main pages — `/` (storefront),
+  `/products/[id]`, `/login`, `/register`, `/cart` (populated), `/checkout`
+  (populated, authed), `/orders/[id]` (authed). Public pages are scanned
+  unauthenticated; protected pages after a login step. `/orders/[id]` uses a
+  synthetic localStorage-seeded order (axe checks markup, not backend
+  convergence).
+- **Scan set:** WCAG A/AA — tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`.
+- **Severity gate:** the test **fails only on `serious` + `critical`** violations
+  (the `GATED_IMPACTS` constant at the top of the spec); `moderate`/`minor` are
+  printed as info but don't fail. Tighten by adding levels to that constant.
+- **Isolation:** a dedicated Playwright **project** (`a11y`). `npm run test:e2e`
+  is `--project=chromium` and ignores the a11y spec, so the functional suite runs
+  exactly its tests; `npm run test:a11y` is `--project=a11y`.
+- **It surfaces real issues by design** — this chunk *adds the audit*, it doesn't
+  fix findings. See the chunk-13 PR for the current results.
+
 ## Storefront notes
 
 Browsing is public — login is only required at checkout. The catalog has no

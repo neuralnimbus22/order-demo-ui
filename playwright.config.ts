@@ -26,8 +26,20 @@ export default defineConfig({
   },
   projects: [
     {
+      // Functional suite — the original specs. Ignores the accessibility spec
+      // so `playwright test --project=chromium` (npm run test:e2e) runs exactly
+      // the functional tests, unchanged.
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      testIgnore: "**/a11y.spec.ts",
+    },
+    {
+      // Accessibility (axe-core) — a different test TYPE, isolated in its own
+      // project so it runs only via `playwright test --project=a11y`
+      // (npm run test:a11y) and never mixes into the functional run.
+      name: "a11y",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: "**/a11y.spec.ts",
     },
   ],
 });

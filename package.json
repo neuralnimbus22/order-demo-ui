@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --project=chromium",
+    "test:a11y": "playwright test --project=a11y",
     "test:cypress": "cypress run",
     "cypress:open": "cypress open",
     "test:selenium": "mocha --config selenium/.mocharc.json",
@@ -21,6 +22,7 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@types/mocha": "^10.0.10",
