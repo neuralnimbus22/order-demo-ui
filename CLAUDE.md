@@ -422,6 +422,29 @@ Cypress/Selenium suites (next) — and ultimately TestKube — all behave identi
   - **Current result:** clean — **0 findings at any severity** (335 rules loaded,
     125 applicable ran on 42 files, all 6 configs resolved, `errors: []`). Honestly
     green, not massaged. JSON → `semgrep/results/` (gitignored).
+- **Image scan / Trivy** (security test TYPE, chunk 15) — `trivy/run.sh`,
+  `npm run test:trivy`. Completes the security pair: Semgrep = source-time
+  (patterns in the code); **Trivy = artifact-time** (known CVEs in the built
+  image's OS packages + node deps). Does NOT run the app or use `E2E_BASE_URL`.
+  - **Pinned container** `aquasec/trivy:0.58.1` (verified by pull). DB fetched at
+    scan time (needs network; cached in `trivy/.trivy-cache/`). Isolated under
+    `trivy/` — no effect on `npm run build`/`lint`.
+  - **What it scans (default, Option A):** builds the image locally from the
+    Dockerfile, `docker save`s it, scans the tar via `--input` — self-contained,
+    no docker-socket mount, no registry auth. **Option B** `TRIVY_IMAGE=<ref>`
+    scans the published GHCR image (public). Scanners: `vuln` + `secret`.
+  - **Gate:** `GATED_SEVERITIES="HIGH,CRITICAL"` + `GATE_FIXABLE_ONLY=1` — exits
+    non-zero only on **fixable** HIGH/CRITICAL. The `--ignore-unfixed` split is
+    deliberate: report EVERYTHING (incl. unfixed HIGH/CRITICAL, marked `NO FIX`,
+    + MEDIUM/LOW counts), gate only on actionable (fixable) ones. A non-completing
+    scan exits **2** loudly (distinct from `1` = gated CVEs, `0` = clean) — never
+    silently green; verified with a non-existent-image trust check.
+  - **Current result (honest, RED):** the local image scan finds **13 HIGH (all
+    fixable), 0 CRITICAL, 10 MEDIUM, 22 LOW** → gate breached (exit 1). HIGHs are
+    base-image OS packages (`libcrypto3`/`libssl3` — openssl, on node:20-alpine)
+    and bundled node deps (`cross-spawn`, `glob`, `minimatch`, `tar`). Surfaced,
+    NOT fixed — no Dockerfile/dep bumps, no gate-loosening, no blanket-ignores.
+    Bumping the base image / deps vs. documenting is a separate decision.
 
 ---
 

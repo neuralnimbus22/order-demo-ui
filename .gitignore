@@ -21,6 +21,8 @@
 /gatling/results/
 /gatling/target/
 /semgrep/results/
+/trivy/results/
+/trivy/.trivy-cache/
 
 # next.js
 /.next/
