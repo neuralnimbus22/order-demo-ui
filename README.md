@@ -256,8 +256,37 @@ npm run test:sast      # or: bash semgrep/run.sh
   A scan that can't complete (bad config / no registry network) fails loudly,
   never silently green.
 - **Source-vs-image security split:** Semgrep is *source-time* (patterns in the
-  code); **Trivy** (next chunk) is *artifact-time* (known CVEs in the built
-  image). Together they're the full security story.
+  code); **Trivy** (below) is *artifact-time* (known CVEs in the built image).
+  Together they're the full security story.
+
+### Container image scan (Trivy)
+
+The **artifact** half of the security pair: Trivy scans the built **image** for
+known CVEs in OS packages + node deps that actually ship. It doesn't run the app
+or use `E2E_BASE_URL`. Full details in [`trivy/README.md`](trivy/README.md).
+
+```bash
+npm run test:trivy        # build the image locally, then scan it (default)
+TRIVY_IMAGE=ghcr.io/neuralnimbus22/order-demo-ui:latest npm run test:trivy   # scan the published image
+```
+
+- **What it scans (default, Option A):** builds the image from the repo
+  Dockerfile, `docker save`s it, and scans the tar via `--input` — self-contained,
+  no docker-socket/registry auth, scans the current source's image. **Option B**
+  (`TRIVY_IMAGE=<ref>`) scans the published GHCR image (public, no auth).
+  Scanners: `vuln` (OS + node deps) + `secret`.
+- **Severity gate:** exits non-zero **only on HIGH/CRITICAL, and only FIXABLE**
+  ones (`GATED_SEVERITIES` + `GATE_FIXABLE_ONLY` in `run.sh`). MEDIUM/LOW and
+  *unfixed* HIGH/CRITICAL are **reported** (the latter marked `NO FIX`) but don't
+  fail the gate — failing on a CVE you can't action just trains people to ignore
+  the gate; hiding it would be dishonest, so it's listed, not gated.
+- **Runner:** a **pinned Trivy container** (`aquasec/trivy:0.58.1`) via Docker —
+  isolated from `npm run build`/`lint`. A scan that can't complete (image not
+  built, DB won't update, etc.) fails loudly and exits 2, never silently green.
+- **It surfaces real CVEs by design** — a node base image + transitive deps carry
+  known vulns, so a red scan is expected (and proves the scan works). This chunk
+  *adds the scan*; bumping the base/deps vs. documenting is a separate decision.
+  See the chunk-15 PR for the current findings.
 
 ## Storefront notes
 
