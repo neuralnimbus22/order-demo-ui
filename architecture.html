@@ -66,6 +66,14 @@
   /* edge labels */
   .elabel { font-size:10.5px; fill:#9fb4cc; }
   .elabel-bg { fill:#0b121d; }
+  /* orchestration hand-off pointer (a plain relative link, not a node/zone) */
+  .pointer { position:absolute; z-index:6; display:flex; align-items:center; gap:6px;
+    text-decoration:none; font-size:11.5px; color:var(--muted);
+    background:rgba(18,28,43,.92); border:1px dashed var(--planned); border-radius:9px;
+    padding:7px 12px; transition:color .12s, border-color .12s; }
+  .pointer:hover { color:var(--ink); border-color:#e0b84a; }
+  .pointer b { color:var(--planned); font-weight:650; }
+  .pointer span { color:#6f8298; }
   /* ---- drawer -------------------------------------------------------- */
   #drawer { position:fixed; top:0; right:0; height:100%; width:380px; max-width:90vw;
     background:var(--panel2); border-left:1px solid var(--rule); z-index:50;
@@ -117,7 +125,6 @@
     <button data-focus="backend">Backend</button>
     <button data-focus="app">App + BFF</button>
     <button data-focus="tests">Tests</button>
-    <button data-focus="orch">Orchestration</button>
   </div>
   <div class="group">
     <button class="walk" id="walkBtn">▶ Walk the system</button>
@@ -127,6 +134,9 @@
 <div id="stage">
   <div id="canvas">
     <svg class="edges" id="edges"></svg>
+    <!-- orchestration hand-off: a compact pointer (not a zone/node), post-REFLOW coords inside the Tests band -->
+    <a class="pointer" href="orchestration.html" title="Orchestration is documented on its own page (built later with the real workflows)"
+       style="left:958px;top:92px;width:374px;height:34px">↗ orchestrated by <b>TestKube</b> · orchestration.html&nbsp;<span>(coming)</span></a>
     <!-- zones + nodes injected here -->
   </div>
 </div>
@@ -175,7 +185,6 @@ const REPOS = {
 
 // Four layered zones (dashed). repo drives the per-node deep-link base.
 const ZONES = [
-  { id:"orch",    label:"Orchestration — planned (TestKube)", repo:"backend", x:24,  y:60,   w:1332, h:150 },
   { id:"tests",   label:"Test layer — 8 tools, one E2E_BASE_URL", repo:"ui",  x:24,  y:244,  w:1332, h:300 },
   { id:"app",     label:"App + BFF",                          repo:"ui",      x:24,  y:578,  w:1332, h:206 },
   { id:"backend", label:"Backend — system under test",        repo:"backend", x:24,  y:818,  w:1332, h:648 },
@@ -183,20 +192,6 @@ const ZONES = [
 
 // status: pass | fail | planned | neutral   (neutral = colored by tone, not a gate)
 const NODES = [
-  /* ---- Orchestration (planned) — testkube samples live in the backend repo ---- */
-  { id:"tk", zone:"orch", tone:"planned", status:"planned", x:586, y:92, w:200, h:54,
-    nm:"TestKube", meta:"orchestration engine", dir:true, path:"testkube",
-    detail:"Runs any framework against the deployed app, in one execution history. Production workflows are built outside the repo; the repo carries commented reference samples in testkube/samples/. PLANNED for this system." },
-  { id:"tk-pytest", zone:"orch", tone:"planned", status:"planned", x:300, y:150, w:196, h:38,
-    nm:"sample · pytest-auth", meta:"reference workflow", path:"testkube/samples/pytest-auth.yaml",
-    detail:"Commented reference TestWorkflow that runs the backend's pytest suite. Sample / planned." },
-  { id:"tk-k6", zone:"orch", tone:"planned", status:"planned", x:596, y:150, w:200, h:38,
-    nm:"sample · k6-load-sharded", meta:"reference workflow", path:"testkube/samples/k6-load-sharded.yaml",
-    detail:"Commented reference TestWorkflow that shards the k6 load test across workers. Sample / planned." },
-  { id:"tk-pw", zone:"orch", tone:"planned", status:"planned", x:896, y:150, w:210, h:38,
-    nm:"sample · playwright-ui", meta:"STAGED", path:"testkube/samples/playwright-ui.yaml",
-    detail:"STAGED reference workflow — wired to the UI repo, activates when order-demo-ui deploys into the order-demo namespace; runs the UI Playwright suite in-cluster." },
-
   /* ---- Test layer (UI repo) — row 1: functional ×3 + load ×2 ---- */
   { id:"t-playwright", zone:"tests", tone:"pass", status:"pass", x:44, y:330, w:226, h:62,
     nm:"Playwright", meta:"functional · 19 ✓", dir:true, path:"e2e",
@@ -319,11 +314,6 @@ const EDGES = [
   // the two static security tools scan artifacts, NOT the running app
   { from:"t-semgrep", to:"a-app", kind:"scan", label:"scans source" },
   { from:"t-trivy", to:"a-image", kind:"scan", label:"scans image" },
-  // orchestration (planned) → the suites it runs
-  { from:"tk", to:"tests", kind:"orch", label:"runs any tool (planned)" },
-  { from:"tk-pw", to:"t-playwright", kind:"orch" },
-  { from:"tk-pytest", to:"bt-pytest", kind:"orch" },
-  { from:"tk-k6", to:"bt-k6", kind:"orch" },
 ];
 
 // Guided narrative — each step focuses a node + shows a caption.
@@ -336,9 +326,19 @@ const WALK = [
   { node:"b-payment",     text:"The matched POST /payments (same id) makes payment publish payment-confirmed — a parallel producer." },
   { node:"b-inventory",   text:"inventory needs BOTH events for that id before the order is fulfilled. This convergence is the whole demo's spine." },
   { node:"t-playwright",  text:"Eight tools test this app — functional, load, accessibility, security, contract — all pointed at one E2E_BASE_URL." },
-  { node:"t-trivy",       text:"Honest signal: axe and Trivy are RED on real findings (WCAG contrast; 13 fixable HIGH CVEs). Surfaced, not hidden." },
-  { node:"tk",            text:"Planned: TestKube runs any of these against the deployed app — any framework, one execution history." },
+  { node:"t-trivy",       text:"Honest signal: axe and Trivy are RED on real findings (WCAG contrast; 13 fixable HIGH CVEs). Surfaced, not hidden. Orchestrating these via TestKube is documented separately — see orchestration.html (coming)." },
 ];
+
+/* =====================================================================
+   REFLOW — orchestration was lifted to a separate page (orchestration.html).
+   Shift the remaining zones + their nodes up by the vacated band so there's
+   no empty gap at the top. Uniform offset → relative spacing is preserved.
+   (The orchestration pointer element below uses post-shift coordinates and is
+   intentionally NOT in NODES, so it isn't affected by this transform.)
+   ===================================================================== */
+const REFLOW = 184;            // removed orch band height (150) + gap (34)
+ZONES.forEach(z => z.y -= REFLOW);
+NODES.forEach(n => n.y -= REFLOW);
 
 /* =====================================================================
    RENDER
