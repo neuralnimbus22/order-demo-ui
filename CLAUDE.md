@@ -380,6 +380,25 @@ Cypress/Selenium suites (next) — and ultimately TestKube — all behave identi
     InfluxDB wiring this tool**. Prereq: JDK 17+ and Maven (`brew install maven`),
     Gatling pulled by Maven, not vendored. The Scala/JVM toolchain is contained
     in `gatling/` — no effect on `npm run build`/`lint`.
+- **Accessibility / axe** (a11y test TYPE, chunk 13) — `e2e/a11y.spec.ts`,
+  `npm run test:a11y`. WCAG auditing via `@axe-core/playwright` through the
+  existing Playwright setup (reads `E2E_BASE_URL`). Audits `/`, `/products/[id]`,
+  `/login`, `/register`, `/cart`, `/checkout`, `/orders/[id]` — public pages
+  unauthenticated, protected pages after login; `/orders/[id]` uses a synthetic
+  localStorage-seeded order (axe checks markup, not convergence). Scan set: WCAG
+  A/AA (`wcag2a`/`wcag2aa`/`wcag21a`/`wcag21aa`).
+  - **Severity gate:** `GATED_IMPACTS = ["serious","critical"]` constant at the
+    top of the spec — fails ONLY on those; `moderate`/`minor` are printed as info,
+    not gated. Tighten by adding levels.
+  - **Isolation via a dedicated Playwright project:** the `a11y` project
+    (`testMatch a11y.spec.ts`); the `chromium` project has
+    `testIgnore a11y.spec.ts`. `test:e2e` is `--project=chromium` (the functional
+    19, unchanged), `test:a11y` is `--project=a11y`.
+  - **Surfaces, does not fix:** this chunk adds the audit. It currently reports a
+    real `serious` `color-contrast` violation on `/`, `/products/[id]`, and
+    `/orders/[id]` (so `test:a11y` is red by design); `/login`/`/register`/`/cart`/
+    `/checkout` pass. The gate was NOT loosened and app components were NOT edited
+    to force green — fixing is a separate decision.
 
 ---
 
