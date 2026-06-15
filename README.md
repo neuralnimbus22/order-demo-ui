@@ -170,6 +170,38 @@ E2E_BASE_URL=https://shop.example.com npm run test:load  # against a deployed UI
   [`k8s/observability/`](k8s/observability/README.md). Streaming is additive and
   off by default; the `.jtl` gate above is unchanged when it's off.
 
+### Load testing (Gatling)
+
+The **second load tool** — the same load, authored as **Scala code** instead of
+JMeter's XML (the vivid "any tool, however written" contrast). Same endpoints,
+comparable profile, same posture, so the two are a fair side-by-side. Batch only
+(native HTML report); no live streaming. Full details in
+[`gatling/README.md`](gatling/README.md).
+
+```bash
+npm run test:load:gatling                                        # default: 20 users, 30s
+USERS=50 DURATION=60 npm run test:load:gatling                   # override the profile
+E2E_BASE_URL=https://shop.example.com npm run test:load:gatling  # against a deployed UI
+```
+
+- **What it loads:** the same BFF entry points as JMeter — `GET /api/products`
+  (fan-out) and `GET /api/health` (baseline). `POST /api/auth/login` is opt-in
+  (`bash gatling/run.sh --include-auth`, off by default); `POST /api/checkout` is
+  **not** loaded (real orders). Profile defaults match JMeter
+  (`USERS=20 RAMP=10 DURATION=30 MAXMS=1500`).
+- **Targeting:** same `E2E_BASE_URL` convention (Gatling takes the base URL
+  directly); the app is assumed already running.
+- **Pass/fail:** Gatling **assertions** — zero failed requests + p95 < `MAXMS`.
+  Unlike JMeter, Gatling **fails the build natively** on a breached assertion, so
+  `mvn gatling:test` exits non-zero on its own — the gate is the tool's own exit
+  code (no `.jtl`-parsing wrapper).
+- **Report:** native HTML at `gatling/results/<sim>-<timestamp>/index.html`
+  (gitignored).
+- **Prereqs:** a JDK (17+) and Maven (`brew install maven` brings both). The
+  Gatling version is **pinned in `gatling/pom.xml`** and pulled by Maven — not
+  vendored. The Scala/JVM toolchain lives entirely under `gatling/`, so it never
+  affects `npm run build`/`lint`.
+
 ## Storefront notes
 
 Browsing is public — login is only required at checkout. The catalog has no

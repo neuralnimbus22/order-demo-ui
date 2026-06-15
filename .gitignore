@@ -18,6 +18,8 @@
 /cypress/screenshots/
 /cypress/downloads/
 /jmeter/results/
+/gatling/results/
+/gatling/target/
 
 # next.js
 /.next/
