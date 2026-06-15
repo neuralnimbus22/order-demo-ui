@@ -23,6 +23,7 @@
 /semgrep/results/
 /trivy/results/
 /trivy/.trivy-cache/
+/newman/results/
 
 # next.js
 /.next/

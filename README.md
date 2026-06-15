@@ -288,6 +288,35 @@ TRIVY_IMAGE=ghcr.io/neuralnimbus22/order-demo-ui:latest npm run test:trivy   # s
   *adds the scan*; bumping the base/deps vs. documenting is a separate decision.
   See the chunk-15 PR for the current findings.
 
+### BFF API contract (Newman)
+
+Contract tests for the Next.js **BFF HTTP API** (`/api/*`), run headlessly with
+Newman. Each route asserts **status + response schema** (the shape the browser
+depends on) — contract testing, not status-only. Full details in
+[`newman/README.md`](newman/README.md).
+
+```bash
+npm run test:bff-contract        # or: bash newman/run.sh
+E2E_BASE_URL=https://shop.example.com npm run test:bff-contract
+```
+
+- **This is the BFF layer, not the backend's service tests.** It hits the
+  `/api/*` routes that front + orchestrate `order-demo-enterprise`; the backend
+  repo's `tests/<service>/` test the services directly. Same tool family,
+  different layer, no overlap.
+- **Covers:** `/api/health`, `/api/products` (+`/:id` known/unknown), the auth
+  flow (login bad/missing/seeded → captures the `session` cookie → `/api/auth/me`
+  with/without it; register fresh/duplicate; logout), and the cookie-gated
+  `/api/orders/:id/status` (401 without cookie; 200 + fulfillment schema with it,
+  no order placed). **Checkout: guards only** — logged-out → 401, empty cart →
+  400 — no real order placed (same posture as the load tests).
+- **Schema:** `pm.response.to.have.jsonSchema` + explicit typed-field checks
+  (`price` is a number, `waitingFor` is an array).
+- **Runner:** a **pinned Newman container** (`postman/newman:6.1.3-alpine`).
+  Newman exits non-zero on any assertion failure (native gate) or run error.
+  Targets `E2E_BASE_URL`; for a host `localhost` target the container reaches the
+  host via `host.docker.internal` (a real hostname passes through untouched).
+
 ## Storefront notes
 
 Browsing is public — login is only required at checkout. The catalog has no
