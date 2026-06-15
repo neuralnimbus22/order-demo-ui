@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>order-demo — architecture & test spread</title>
+<style>
+  :root {
+    --bg:#0a0e14; --panel:#0f1622; --panel2:#131c2b; --ink:#e6edf6; --muted:#8aa0b8;
+    --line:#1e2a3c; --rule:#26344a;
+    --pass:#34d399; --fail:#f87171; --planned:#fbbf24;
+    --service:#2dd4bf; --infra:#a78bfa; --kafka:#f59e0b; --app:#38bdf8;
+    --bff:#818cf8; --client:#94a3b8; --backendtest:#6ee7b7; --ci:#64748b;
+    --http:#38bdf8; --deps:#475569; --e2e:#34d399; --scan:#c084fc; --orch:#fbbf24;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial; }
+  a { color:#7dd3fc; }
+  /* ---- top bar ------------------------------------------------------- */
+  header { position:sticky; top:0; z-index:40; display:flex; flex-wrap:wrap;
+    gap:12px; align-items:center; padding:12px 18px; background:rgba(10,14,20,.92);
+    backdrop-filter:blur(6px); border-bottom:1px solid var(--rule); }
+  header h1 { font-size:15px; margin:0; letter-spacing:.3px; font-weight:650; }
+  header .sub { color:var(--muted); font-size:12px; }
+  .spacer { flex:1; }
+  .group { display:flex; gap:6px; align-items:center; }
+  .group .lbl { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.6px; margin-right:2px; }
+  button { font:inherit; font-size:12px; color:var(--ink); background:var(--panel2);
+    border:1px solid var(--rule); border-radius:7px; padding:6px 11px; cursor:pointer; }
+  button:hover { border-color:#3a4d6b; }
+  button.active { background:#1d2c45; border-color:#3f6196; color:#cfe2ff; }
+  button.walk { background:#15331f; border-color:#2c6b41; color:#bdf0cd; }
+  /* ---- canvas -------------------------------------------------------- */
+  #stage { position:relative; overflow:auto; height:calc(100vh - 52px); }
+  #canvas { position:relative; }
+  svg.edges { position:absolute; inset:0; pointer-events:none; }
+  .zone { position:absolute; border:1.5px dashed var(--rule); border-radius:16px;
+    background:linear-gradient(180deg,rgba(255,255,255,.012),rgba(255,255,255,0)); }
+  .zone .ztitle { position:absolute; top:-11px; left:18px; background:var(--bg);
+    padding:0 10px; font-size:12px; font-weight:650; letter-spacing:.4px; }
+  .zone .zrepo { position:absolute; top:-10px; right:16px; background:var(--bg);
+    padding:0 8px; font-size:10.5px; color:var(--muted); }
+  .zone .zrepo b { color:#9fb4cc; font-weight:600; }
+  .dim { opacity:.12; filter:saturate(.3); transition:opacity .25s; }
+  .edim { opacity:.07; transition:opacity .25s; }
+  /* ---- nodes --------------------------------------------------------- */
+  .node { position:absolute; border-radius:11px; padding:9px 12px; cursor:pointer;
+    background:var(--panel); border:1.5px solid var(--line);
+    box-shadow:0 1px 0 rgba(0,0,0,.4); transition:transform .12s, box-shadow .12s, opacity .25s;
+    display:flex; flex-direction:column; justify-content:center; }
+  .node:hover { transform:translateY(-1px); }
+  .node .nm { font-weight:640; font-size:13px; }
+  .node .meta { color:var(--muted); font-size:11px; margin-top:1px; }
+  .node .dot { position:absolute; top:8px; right:9px; width:8px; height:8px; border-radius:50%; }
+  .node.sel { box-shadow:0 0 0 2px #4d7ec9, 0 6px 22px rgba(40,90,170,.35); }
+  .node.pulse { animation:pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{ box-shadow:0 0 0 2px rgba(120,200,160,.5);} 50%{ box-shadow:0 0 0 7px rgba(120,200,160,0);} }
+  /* tone accents (left border + dot color) */
+  .t-pass{border-left:4px solid var(--pass)} .t-fail{border-left:4px solid var(--fail)}
+  .t-planned{border-left:4px dashed var(--planned)} .t-service{border-left:4px solid var(--service)}
+  .t-infra{border-left:4px solid var(--infra)} .t-kafka{border-left:4px solid var(--kafka)}
+  .t-app{border-left:4px solid var(--app)} .t-bff{border-left:4px solid var(--bff)}
+  .t-client{border-left:4px solid var(--client)} .t-backendtest{border-left:4px solid var(--backendtest)}
+  .t-ci{border-left:4px solid var(--ci)}
+  /* edge labels */
+  .elabel { font-size:10.5px; fill:#9fb4cc; }
+  .elabel-bg { fill:#0b121d; }
+  /* ---- drawer -------------------------------------------------------- */
+  #drawer { position:fixed; top:0; right:0; height:100%; width:380px; max-width:90vw;
+    background:var(--panel2); border-left:1px solid var(--rule); z-index:50;
+    transform:translateX(100%); transition:transform .22s ease; padding:20px;
+    overflow:auto; box-shadow:-12px 0 40px rgba(0,0,0,.45); }
+  #drawer.open { transform:translateX(0); }
+  #drawer .x { position:absolute; top:14px; right:16px; }
+  #drawer .badge { display:inline-block; font-size:10.5px; padding:2px 8px; border-radius:999px;
+    border:1px solid var(--rule); color:var(--muted); margin:0 6px 6px 0; }
+  #drawer h2 { margin:6px 0 2px; font-size:18px; }
+  #drawer .dmeta { color:var(--muted); font-size:12px; margin-bottom:14px; }
+  #drawer .status { font-weight:650; padding:3px 9px; border-radius:7px; font-size:12px; }
+  .s-pass{ background:#0f2a1d; color:var(--pass); } .s-fail{ background:#2c1414; color:var(--fail); }
+  .s-planned{ background:#2c2410; color:var(--planned); } .s-neutral{ background:#16202e; color:#9fb4cc; }
+  #drawer p.detail { color:#cdd9e8; font-size:13.5px; line-height:1.55; }
+  #drawer .repo { margin-top:18px; padding-top:14px; border-top:1px solid var(--rule); }
+  #drawer .repo a { display:inline-flex; gap:7px; align-items:center; font-weight:600;
+    background:#13243a; border:1px solid #2d486f; padding:8px 13px; border-radius:8px; text-decoration:none; }
+  #drawer .repo .reponame { color:var(--muted); font-size:11.5px; margin-top:7px; }
+  /* ---- legend -------------------------------------------------------- */
+  #legend { position:fixed; left:14px; bottom:14px; z-index:30; background:rgba(15,22,34,.94);
+    border:1px solid var(--rule); border-radius:10px; padding:10px 12px; font-size:11px;
+    color:var(--muted); max-width:300px; }
+  #legend .row { display:flex; gap:14px; flex-wrap:wrap; }
+  #legend b { color:#bcc; font-weight:600; }
+  #legend .sw { display:inline-flex; align-items:center; gap:5px; margin-right:2px; }
+  #legend .chip { width:10px; height:10px; border-radius:3px; display:inline-block; }
+  #legend .ln { width:16px; height:0; border-top:2px solid; display:inline-block; }
+  /* walk caption */
+  #walkbar { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:55;
+    background:#10261a; border:1px solid #2c6b41; border-radius:12px; padding:12px 16px;
+    width:min(640px,92vw); display:none; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+  #walkbar.show { display:block; }
+  #walkbar .wstep { color:#7fe0a0; font-size:11px; text-transform:uppercase; letter-spacing:.6px; }
+  #walkbar .wtext { color:#e6edf6; margin:5px 0 10px; font-size:13.5px; }
+  #walkbar .wctl { display:flex; gap:8px; align-items:center; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>order-demo — architecture &amp; test spread</h1>
+    <div class="sub">backend system-under-test · Next.js app + BFF · 8 UI test tools · planned orchestration</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="group">
+    <span class="lbl">Focus</span>
+    <button data-focus="all" class="active">All</button>
+    <button data-focus="backend">Backend</button>
+    <button data-focus="app">App + BFF</button>
+    <button data-focus="tests">Tests</button>
+    <button data-focus="orch">Orchestration</button>
+  </div>
+  <div class="group">
+    <button class="walk" id="walkBtn">▶ Walk the system</button>
+  </div>
+</header>
+
+<div id="stage">
+  <div id="canvas">
+    <svg class="edges" id="edges"></svg>
+    <!-- zones + nodes injected here -->
+  </div>
+</div>
+
+<div id="drawer">
+  <button class="x" onclick="closeDrawer()">✕</button>
+  <div id="drawerBody"></div>
+</div>
+
+<div id="legend">
+  <div class="row" style="margin-bottom:6px">
+    <span class="sw"><span class="chip" style="background:var(--pass)"></span><b>green</b> gate passing</span>
+    <span class="sw"><span class="chip" style="background:var(--fail)"></span><b>RED</b> real finding</span>
+    <span class="sw"><span class="chip" style="background:var(--planned)"></span><b>planned</b></span>
+  </div>
+  <div class="row">
+    <span class="sw"><span class="ln" style="border-color:var(--http)"></span>HTTP</span>
+    <span class="sw"><span class="ln" style="border-color:var(--kafka)"></span>Kafka</span>
+    <span class="sw"><span class="ln" style="border-color:var(--e2e)"></span>E2E_BASE_URL</span>
+    <span class="sw"><span class="ln" style="border-color:var(--scan)"></span>scans</span>
+    <span class="sw"><span class="ln" style="border-color:var(--deps)"></span>data</span>
+  </div>
+</div>
+
+<div id="walkbar">
+  <div class="wstep" id="walkStep"></div>
+  <div class="wtext" id="walkText"></div>
+  <div class="wctl">
+    <button onclick="walkPrev()">‹ Back</button>
+    <button onclick="walkNext()">Next ›</button>
+    <span class="spacer" style="flex:1"></span>
+    <button onclick="walkEnd()">Exit walk</button>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   DATA — edit these arrays to iterate (add a node, relabel an edge,
+   light up a workflow). Everything below renders from them.
+   ===================================================================== */
+
+const REPOS = {
+  backend: { root:"https://github.com/neuralnimbus22/order-demo-enterprise", label:"order-demo-enterprise" },
+  ui:      { root:"https://github.com/neuralnimbus22/order-demo-ui",         label:"order-demo-ui" },
+};
+
+// Four layered zones (dashed). repo drives the per-node deep-link base.
+const ZONES = [
+  { id:"orch",    label:"Orchestration — planned (TestKube)", repo:"backend", x:24,  y:60,   w:1332, h:150 },
+  { id:"tests",   label:"Test layer — 8 tools, one E2E_BASE_URL", repo:"ui",  x:24,  y:244,  w:1332, h:300 },
+  { id:"app",     label:"App + BFF",                          repo:"ui",      x:24,  y:578,  w:1332, h:206 },
+  { id:"backend", label:"Backend — system under test",        repo:"backend", x:24,  y:818,  w:1332, h:648 },
+];
+
+// status: pass | fail | planned | neutral   (neutral = colored by tone, not a gate)
+const NODES = [
+  /* ---- Orchestration (planned) — testkube samples live in the backend repo ---- */
+  { id:"tk", zone:"orch", tone:"planned", status:"planned", x:586, y:92, w:200, h:54,
+    nm:"TestKube", meta:"orchestration engine", dir:true, path:"testkube",
+    detail:"Runs any framework against the deployed app, in one execution history. Production workflows are built outside the repo; the repo carries commented reference samples in testkube/samples/. PLANNED for this system." },
+  { id:"tk-pytest", zone:"orch", tone:"planned", status:"planned", x:300, y:150, w:196, h:38,
+    nm:"sample · pytest-auth", meta:"reference workflow", path:"testkube/samples/pytest-auth.yaml",
+    detail:"Commented reference TestWorkflow that runs the backend's pytest suite. Sample / planned." },
+  { id:"tk-k6", zone:"orch", tone:"planned", status:"planned", x:596, y:150, w:200, h:38,
+    nm:"sample · k6-load-sharded", meta:"reference workflow", path:"testkube/samples/k6-load-sharded.yaml",
+    detail:"Commented reference TestWorkflow that shards the k6 load test across workers. Sample / planned." },
+  { id:"tk-pw", zone:"orch", tone:"planned", status:"planned", x:896, y:150, w:210, h:38,
+    nm:"sample · playwright-ui", meta:"STAGED", path:"testkube/samples/playwright-ui.yaml",
+    detail:"STAGED reference workflow — wired to the UI repo, activates when order-demo-ui deploys into the order-demo namespace; runs the UI Playwright suite in-cluster." },
+
+  /* ---- Test layer (UI repo) — row 1: functional ×3 + load ×2 ---- */
+  { id:"t-playwright", zone:"tests", tone:"pass", status:"pass", x:44, y:330, w:226, h:62,
+    nm:"Playwright", meta:"functional · 19 ✓", dir:true, path:"e2e",
+    detail:"19 functional browser tests (smoke, auth, storefront, checkout, order-status). npm run test:e2e (chromium project). Reads E2E_BASE_URL; native assertion gate. STATUS: green." },
+  { id:"t-cypress", zone:"tests", tone:"pass", status:"pass", x:304, y:330, w:226, h:62,
+    nm:"Cypress", meta:"functional · 19 ✓", dir:true, path:"cypress/e2e",
+    detail:"19 functional tests mirroring Playwright's flows. npm run test:cypress. STATUS: green." },
+  { id:"t-selenium", zone:"tests", tone:"pass", status:"pass", x:564, y:330, w:226, h:62,
+    nm:"Selenium", meta:"functional · 19 ✓", dir:true, path:"selenium",
+    detail:"selenium-webdriver + Mocha + tsx, 19 tests with explicit waits; chromedriver via Selenium Manager. npm run test:selenium. STATUS: green." },
+  { id:"t-jmeter", zone:"tests", tone:"pass", status:"pass", x:824, y:330, w:226, h:62,
+    nm:"JMeter", meta:"load ✓", path:"jmeter/order-demo-load.jmx",
+    detail:"Load on the BFF (GET /api/products fan-out + /api/health). Gate: HTTP 200 + p95<1500ms (.jtl-parsed by jmeter/run.sh). Optional live stream to InfluxDB+Grafana. npm run test:load. STATUS: green." },
+  { id:"t-gatling", zone:"tests", tone:"pass", status:"pass", x:1084, y:330, w:226, h:62,
+    nm:"Gatling", meta:"load · Scala ✓", path:"gatling/src/test/scala/orderdemo/OrderDemoUiLoadSimulation.scala",
+    detail:"Same load as JMeter, authored in Scala (Maven, pinned plugin). Gate: 0 failed requests + p95<1500ms (native non-zero exit). npm run test:load:gatling. STATUS: green." },
+
+  /* ---- Test layer — row 2: a11y + security ×2 + contract ---- */
+  { id:"t-axe", zone:"tests", tone:"fail", status:"fail", x:187, y:440, w:226, h:62,
+    nm:"axe", meta:"a11y · WCAG A/AA · RED", path:"e2e/a11y.spec.ts",
+    detail:"7 page audits via @axe-core/playwright (a11y project). Gate: serious+critical. STATUS: RED — color-contrast (serious) on / (16 nodes), /products/[id] (1), /orders/[id] (2). login/register/cart/checkout pass. Surfaced, not fixed." },
+  { id:"t-semgrep", zone:"tests", tone:"pass", status:"pass", x:447, y:440, w:226, h:62,
+    nm:"Semgrep", meta:"SAST · source ✓", path:"semgrep/run.sh",
+    detail:"Static analysis of app/lib/components for vulnerable patterns (pinned semgrep/semgrep:1.97.0; p/typescript,javascript,react,nextjs,security-audit,secrets). Gate: ERROR. npm run test:sast. STATUS: green — 0 findings." },
+  { id:"t-trivy", zone:"tests", tone:"fail", status:"fail", x:707, y:440, w:226, h:62,
+    nm:"Trivy", meta:"image CVEs · RED", path:"trivy/run.sh",
+    detail:"CVE scan of the built image (pinned aquasec/trivy:0.58.1; vuln+secret). Gate: fixable HIGH/CRITICAL. STATUS: RED — 13 fixable HIGH (openssl libcrypto3/libssl3 + cross-spawn/glob/minimatch/tar), 0 critical, 10 medium, 22 low. Surfaced, not fixed." },
+  { id:"t-newman", zone:"tests", tone:"pass", status:"pass", x:967, y:440, w:226, h:62,
+    nm:"Newman", meta:"BFF API contract ✓", path:"newman/order-demo-bff.postman_collection.json",
+    detail:"Contract tests of the BFF /api/* — status + JSON schema per route (pinned postman/newman:6.1.3-alpine). 37 assertions. npm run test:bff-contract. STATUS: green. The BFF layer — distinct from the backend's service-level Newman." },
+
+  /* ---- App + BFF (UI repo) ---- */
+  { id:"a-app", zone:"app", tone:"app", status:"neutral", x:90, y:650, w:250, h:64,
+    nm:"App — React pages", meta:"storefront · cart · checkout · orders", dir:true, path:"app",
+    detail:"Next.js App Router pages: storefront, product detail, cart, checkout, login/register, account, orders. The browser talks ONLY to the BFF (same-origin)." },
+  { id:"a-bff", zone:"app", tone:"bff", status:"neutral", x:470, y:642, w:312, h:80,
+    nm:"BFF — app/api/*", meta:"the only thing that talks to the services", dir:true, path:"app/api",
+    detail:"Backend-for-Frontend route handlers (server-side): health, products, auth (login/me/register/logout), checkout (the correlation-id orchestration: one id → POST /orders → POST /payments), orders/[id]/status. The user's JWT gates the UI only and is NEVER forwarded to order-service." },
+  { id:"a-client", zone:"app", tone:"client", status:"neutral", x:860, y:650, w:200, h:64,
+    nm:"lib/backend.ts", meta:"typed service client", path:"lib/backend.ts",
+    detail:"The server-only typed client the BFF routes use to reach the six services by env-var URLs — never hardcoded, never called from the browser." },
+  { id:"a-image", zone:"app", tone:"infra", status:"neutral", x:1110, y:626, w:222, h:44,
+    nm:"Image — Dockerfile", meta:"node:20-alpine standalone", path:"Dockerfile",
+    detail:"Multi-stage Next standalone build, published to GHCR (multi-arch), deployed via k8s/order-demo-ui.yaml. This is the artifact Trivy scans." },
+  { id:"a-obsv", zone:"app", tone:"infra", status:"neutral", x:1110, y:688, w:222, h:44,
+    nm:"Observability", meta:"InfluxDB 1.8 + Grafana", dir:true, path:"k8s/observability",
+    detail:"Provisioned InfluxDB 1.8 + Grafana for JMeter's live load dashboard (ClusterIP, reached by port-forward). Datasource + dashboard provisioned as code." },
+
+  /* ---- Backend — services (order-demo-enterprise) ---- */
+  { id:"b-auth", zone:"backend", tone:"service", status:"neutral", x:80, y:980, w:152, h:60,
+    nm:"auth", meta:":3001 · authorize order", path:"services/auth/server.js",
+    detail:"Static Bearer-token authorization for an ORDER. order-service calls it before publishing. Down/reject/degraded → order returns an opaque 502 and never publishes. Not human login." },
+  { id:"b-order", zone:"backend", tone:"service", status:"neutral", x:282, y:902, w:162, h:62,
+    nm:"order", meta:":3002 · order pipeline", path:"services/order/server.js",
+    detail:"Validates the sku via product-catalog (when supplied), authorizes via auth, then — only on success — publishes order-placed to Kafka. Opaque 502 on any upstream failure; no fallback path." },
+  { id:"b-catalog", zone:"backend", tone:"service", status:"neutral", x:282, y:1010, w:162, h:56,
+    nm:"product-catalog", meta:":3005 · read-only", path:"services/product-catalog/server.js",
+    detail:"Postgres-backed catalog (~20 seeded products). order validates an incoming sku here; the product id IS the sku. Display-only stock." },
+  { id:"b-payment", zone:"backend", tone:"service", status:"neutral", x:282, y:1112, w:162, h:56,
+    nm:"payment", meta:":3004 · confirm payment", path:"services/payment/server.js",
+    detail:"Confirms a payment and publishes payment-confirmed to Kafka. Independent of auth and order — a parallel producer." },
+  { id:"b-orderplaced", zone:"backend", tone:"kafka", status:"neutral", x:506, y:912, w:158, h:44,
+    nm:"Kafka · order-placed", meta:"topic", path:"kafka/kafka.yaml",
+    detail:"Topic produced by order, consumed by inventory. Single-node KRaft Kafka." },
+  { id:"b-paymentconfirmed", zone:"backend", tone:"kafka", status:"neutral", x:506, y:1118, w:158, h:44,
+    nm:"Kafka · payment-confirmed", meta:"topic", path:"kafka/kafka.yaml",
+    detail:"Topic produced by payment, consumed by inventory." },
+  { id:"b-inventory", zone:"backend", tone:"service", status:"neutral", x:726, y:1000, w:184, h:72,
+    nm:"inventory ★ converges", meta:":3003 · needs BOTH events", path:"services/inventory/server.js",
+    detail:"Consumes BOTH order-placed AND payment-confirmed; an order id is FULFILLED only once both have arrived for that id (/fulfilled/:id). Redis read-through cache over Postgres; a stale cache surfaces as 409 DATA_INCONSISTENCY. The convergence + symptom point." },
+  { id:"b-usersession", zone:"backend", tone:"service", status:"neutral", x:726, y:1132, w:184, h:60,
+    nm:"user-session", meta:":3006 · human login (JWT)", path:"services/user-session/server.js",
+    detail:"register / login (HS256 JWT) / validate — the human-identity service the BFF logs users into. Standalone: not on the order pipeline. Deliberately distinct from auth-service." },
+  { id:"b-redis", zone:"backend", tone:"infra", status:"neutral", x:966, y:946, w:140, h:52,
+    nm:"Redis", meta:":6379 · stock cache", path:"k8s/redis.yaml",
+    detail:"Read-through cache in front of inventory's stock lookups." },
+  { id:"b-postgres", zone:"backend", tone:"infra", status:"neutral", x:966, y:1040, w:160, h:60,
+    nm:"Postgres", meta:":5432 · source of truth", path:"k8s/db.yaml",
+    detail:"Single instance hosting three separate tables: stock (inventory), products (catalog), users (user-session)." },
+
+  /* ---- Backend — its own service-level tests + CI ---- */
+  { id:"bt-pytest", zone:"backend", tone:"backendtest", status:"neutral", x:120, y:1300, w:212, h:52,
+    nm:"pytest ×5", meta:"service-level API tests", dir:true, path:"tests",
+    detail:"Per-service pytest for auth, payment, inventory (+ cache-consistency), product-catalog, user-session — each tests its service's API DIRECTLY. Distinct layer from the UI repo's BFF tests." },
+  { id:"bt-newman", zone:"backend", tone:"backendtest", status:"neutral", x:352, y:1300, w:202, h:52,
+    nm:"Newman · order", meta:"service-level", path:"tests/order/order.postman_collection.json",
+    detail:"Service-level API test of order-service's POST /orders. Same tool family as the UI repo's Newman, but a different layer (the service directly, not the BFF)." },
+  { id:"bt-k6", zone:"backend", tone:"backendtest", status:"neutral", x:574, y:1300, w:202, h:52,
+    nm:"k6 · order-load", meta:"backend load → HPA", path:"tests/load/order-load.js",
+    detail:"Backend load against order-service (ramp to 50 VUs, hold 3m; p95<800ms, fail<5%) to drive the HorizontalPodAutoscaler. Lives in the BACKEND repo, not the UI repo." },
+  { id:"b-ci", zone:"backend", tone:"ci", status:"neutral", x:1096, y:1300, w:236, h:52,
+    nm:"CI — images + tests", meta:".github/workflows", path:".github/workflows/build-images.yml",
+    detail:"build-images.yml builds the six services → GHCR (multi-arch); ci-tests.yml runs the service tests against the live cluster." },
+];
+
+// kind: http | kafka | deps | e2e | scan | orch   (from/to may be a node id OR a zone id)
+const EDGES = [
+  // backend internal — the order pipeline + convergence
+  { from:"b-order", to:"b-auth", kind:"http", label:"authorize" },
+  { from:"b-order", to:"b-catalog", kind:"http", label:"validate sku" },
+  { from:"b-order", to:"b-orderplaced", kind:"kafka", label:"publish" },
+  { from:"b-payment", to:"b-paymentconfirmed", kind:"kafka", label:"publish" },
+  { from:"b-orderplaced", to:"b-inventory", kind:"kafka", label:"consume" },
+  { from:"b-paymentconfirmed", to:"b-inventory", kind:"kafka", label:"consume" },
+  { from:"b-inventory", to:"b-redis", kind:"deps", label:"cache" },
+  { from:"b-inventory", to:"b-postgres", kind:"deps", label:"stock" },
+  { from:"b-catalog", to:"b-postgres", kind:"deps", label:"products" },
+  { from:"b-usersession", to:"b-postgres", kind:"deps", label:"users" },
+  // app + BFF
+  { from:"a-app", to:"a-bff", kind:"http", label:"same-origin" },
+  { from:"a-bff", to:"a-client", kind:"deps" },
+  // BFF → services (fan-out, server-side)
+  { from:"a-bff", to:"b-order", kind:"http", label:"POST /orders" },
+  { from:"a-bff", to:"b-payment", kind:"http", label:"POST /payments" },
+  { from:"a-bff", to:"b-inventory", kind:"http", label:"GET /fulfilled" },
+  { from:"a-bff", to:"b-catalog", kind:"http", label:"GET /products" },
+  { from:"a-bff", to:"b-usersession", kind:"http", label:"login / validate" },
+  // tests → app : the ONE shared convention (refinement #2)
+  { from:"tests", to:"a-bff", kind:"e2e", label:"E2E_BASE_URL — app already running", bold:true },
+  // the two static security tools scan artifacts, NOT the running app
+  { from:"t-semgrep", to:"a-app", kind:"scan", label:"scans source" },
+  { from:"t-trivy", to:"a-image", kind:"scan", label:"scans image" },
+  // orchestration (planned) → the suites it runs
+  { from:"tk", to:"tests", kind:"orch", label:"runs any tool (planned)" },
+  { from:"tk-pw", to:"t-playwright", kind:"orch" },
+  { from:"tk-pytest", to:"bt-pytest", kind:"orch" },
+  { from:"tk-k6", to:"bt-k6", kind:"orch" },
+];
+
+// Guided narrative — each step focuses a node + shows a caption.
+const WALK = [
+  { node:"a-app",         text:"A shopper opens the storefront. The browser talks only to the Next.js app — never to a backend service directly." },
+  { node:"a-bff",         text:"Every backend call goes through the BFF (app/api/*), server-side. This is the single seam between browser and services." },
+  { node:"b-usersession", text:"Login goes to user-session, which issues a signed JWT. The BFF stores it in an httpOnly cookie that gates the UI only." },
+  { node:"b-order",       text:"At checkout the BFF generates ONE correlation id and POSTs /orders. order validates the sku and authorizes via auth." },
+  { node:"b-orderplaced", text:"Only after auth says yes does order publish order-placed to Kafka. No auth → no event, ever." },
+  { node:"b-payment",     text:"The matched POST /payments (same id) makes payment publish payment-confirmed — a parallel producer." },
+  { node:"b-inventory",   text:"inventory needs BOTH events for that id before the order is fulfilled. This convergence is the whole demo's spine." },
+  { node:"t-playwright",  text:"Eight tools test this app — functional, load, accessibility, security, contract — all pointed at one E2E_BASE_URL." },
+  { node:"t-trivy",       text:"Honest signal: axe and Trivy are RED on real findings (WCAG contrast; 13 fixable HIGH CVEs). Surfaced, not hidden." },
+  { node:"tk",            text:"Planned: TestKube runs any of these against the deployed app — any framework, one execution history." },
+];
+
+/* =====================================================================
+   RENDER
+   ===================================================================== */
+const TONE_DOT = { pass:"var(--pass)", fail:"var(--fail)", planned:"var(--planned)",
+  service:"var(--service)", infra:"var(--infra)", kafka:"var(--kafka)", app:"var(--app)",
+  bff:"var(--bff)", client:"var(--client)", backendtest:"var(--backendtest)", ci:"var(--ci)" };
+const EDGE_COLOR = { http:"var(--http)", kafka:"var(--kafka)", deps:"var(--deps)", e2e:"var(--e2e)", scan:"var(--scan)", orch:"var(--orch)" };
+
+const canvas = document.getElementById("canvas");
+const svg = document.getElementById("edges");
+const rectOf = {};                 // id -> {x,y,w,h}  (nodes AND zones)
+const nodeById = {}; NODES.forEach(n => nodeById[n.id] = n);
+const zoneById = {}; ZONES.forEach(z => zoneById[z.id] = z);
+
+// canvas size from the largest zone extent
+const CW = Math.max(...ZONES.map(z=>z.x+z.w)) + 24;
+const CH = Math.max(...ZONES.map(z=>z.y+z.h)) + 24;
+canvas.style.width = CW+"px"; canvas.style.height = CH+"px";
+svg.setAttribute("width", CW); svg.setAttribute("height", CH);
+svg.setAttribute("viewBox", `0 0 ${CW} ${CH}`);
+
+// arrow markers (one per edge color)
+const defs = document.createElementNS("http://www.w3.org/2000/svg","defs");
+Object.entries(EDGE_COLOR).forEach(([k,c])=>{
+  defs.insertAdjacentHTML("beforeend",
+   `<marker id="arr-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="${c}"/></marker>`);
+});
+svg.appendChild(defs);
+
+// zones
+ZONES.forEach(z=>{
+  rectOf[z.id] = {x:z.x,y:z.y,w:z.w,h:z.h};
+  const el = document.createElement("div");
+  el.className = "zone"; el.dataset.zone = z.id;
+  el.style.cssText = `left:${z.x}px;top:${z.y}px;width:${z.w}px;height:${z.h}px`;
+  el.innerHTML = `<span class="ztitle">${z.label}</span>
+                  <span class="zrepo">repo · <b>${REPOS[z.repo].label}</b></span>`;
+  canvas.appendChild(el);
+});
+
+// nodes
+NODES.forEach(n=>{
+  rectOf[n.id] = {x:n.x,y:n.y,w:n.w,h:n.h};
+  const el = document.createElement("div");
+  el.className = `node t-${n.tone}`; el.id = "node-"+n.id; el.dataset.zone = n.zone;
+  el.style.cssText = `left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px`;
+  el.innerHTML = `<span class="dot" style="background:${TONE_DOT[n.tone]}"></span>
+                  <div class="nm">${n.nm}</div><div class="meta">${n.meta||""}</div>`;
+  el.addEventListener("click", ()=>selectNode(n.id));
+  canvas.appendChild(el);
+});
+
+// edges
+function center(r){ return {x:r.x+r.w/2, y:r.y+r.h/2}; }
+// clip the segment c->other to rect r's border (returns the border point near c)
+function borderPoint(r, toward){
+  const c = center(r); const dx = toward.x-c.x, dy = toward.y-c.y;
+  if (dx===0 && dy===0) return c;
+  const hw=r.w/2, hh=r.h/2;
+  const sx = dx!==0 ? hw/Math.abs(dx) : Infinity;
+  const sy = dy!==0 ? hh/Math.abs(dy) : Infinity;
+  const s = Math.min(sx,sy);
+  return { x:c.x+dx*s, y:c.y+dy*s };
+}
+const edgeEls = [];
+EDGES.forEach(e=>{
+  const ra = rectOf[e.from], rb = rectOf[e.to]; if(!ra||!rb) return;
+  const a = borderPoint(ra, center(rb)), b = borderPoint(rb, center(ra));
+  const col = EDGE_COLOR[e.kind];
+  const dash = (e.kind==="orch") ? "7 5" : (e.kind==="scan" ? "3 4" : (e.kind==="deps" ? "2 4" : "0"));
+  const w = e.bold ? 3 : (e.kind==="deps" ? 1.2 : 1.8);
+  const g = document.createElementNS("http://www.w3.org/2000/svg","g");
+  const zfrom = nodeById[e.from]?.zone || e.from, zto = nodeById[e.to]?.zone || e.to;
+  g.dataset.from = zfrom; g.dataset.to = zto;
+  const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+  path.setAttribute("d", `M${a.x} ${a.y} L${b.x} ${b.y}`);
+  path.setAttribute("stroke", col); path.setAttribute("stroke-width", w);
+  path.setAttribute("fill","none"); path.setAttribute("stroke-dasharray", dash);
+  path.setAttribute("marker-end", `url(#arr-${e.kind})`);
+  if (e.bold) path.setAttribute("opacity","0.95");
+  g.appendChild(path);
+  if (e.label){
+    const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+    const tw = e.label.length*5.6 + 8;
+    const bg = document.createElementNS("http://www.w3.org/2000/svg","rect");
+    bg.setAttribute("x", mx-tw/2); bg.setAttribute("y", my-9); bg.setAttribute("width", tw);
+    bg.setAttribute("height", 15); bg.setAttribute("rx", 4); bg.setAttribute("class","elabel-bg");
+    bg.setAttribute("opacity", e.bold?"1":".9");
+    const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x", mx); t.setAttribute("y", my+2); t.setAttribute("text-anchor","middle");
+    t.setAttribute("class","elabel"); if(e.bold) t.setAttribute("style","fill:#bdf0cd;font-weight:600");
+    t.textContent = e.label;
+    g.appendChild(bg); g.appendChild(t);
+  }
+  svg.appendChild(g); edgeEls.push(g);
+});
+
+/* =====================================================================
+   INTERACTIONS — focus, drawer, walk
+   ===================================================================== */
+const drawer = document.getElementById("drawer");
+const drawerBody = document.getElementById("drawerBody");
+let selected = null;
+
+function linkFor(n){
+  const repo = REPOS[ (n.repoOverride) || zoneById[n.zone].repo ];
+  return `${repo.root}/${n.dir?"tree":"blob"}/main/${n.path}`;
+}
+const STATUS_LABEL = { pass:"GATE: GREEN", fail:"GATE: RED — real finding", planned:"PLANNED", neutral:"" };
+const STATUS_CLASS = { pass:"s-pass", fail:"s-fail", planned:"s-planned", neutral:"s-neutral" };
+
+function selectNode(id){
+  const n = nodeById[id]; if(!n) return;
+  selected = id;
+  document.querySelectorAll(".node").forEach(el=>el.classList.remove("sel"));
+  document.getElementById("node-"+id).classList.add("sel");
+  const repo = REPOS[ zoneById[n.zone].repo ];
+  const st = n.status||"neutral";
+  drawerBody.innerHTML = `
+    <span class="badge">${zoneById[n.zone].label}</span>
+    <h2>${n.nm}</h2>
+    <div class="dmeta">${n.meta||""}</div>
+    ${st!=="neutral" ? `<span class="status ${STATUS_CLASS[st]}">${STATUS_LABEL[st]}</span>` : ""}
+    <p class="detail">${n.detail||""}</p>
+    <div class="repo">
+      <a href="${linkFor(n)}" target="_blank" rel="noopener">↗ View in repo</a>
+      <div class="reponame">${repo.label} · ${n.path}</div>
+    </div>`;
+  drawer.classList.add("open");
+}
+function closeDrawer(){ drawer.classList.remove("open");
+  document.querySelectorAll(".node").forEach(el=>el.classList.remove("sel")); selected=null; }
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ closeDrawer(); if(walkOn) walkEnd(); }});
+
+// focus / layer toggle
+let focus = "all";
+function applyFocus(f){
+  focus = f;
+  document.querySelectorAll("header button[data-focus]").forEach(b=>
+    b.classList.toggle("active", b.dataset.focus===f));
+  document.querySelectorAll(".zone, .node").forEach(el=>
+    el.classList.toggle("dim", f!=="all" && el.dataset.zone!==f));
+  edgeEls.forEach(g=>{
+    const keep = f==="all" || g.dataset.from===f || g.dataset.to===f;
+    g.classList.toggle("edim", !keep);
+  });
+}
+document.querySelectorAll("header button[data-focus]").forEach(b=>
+  b.addEventListener("click", ()=>applyFocus(b.dataset.focus)));
+
+// walk mode
+let walkOn=false, walkIdx=0;
+const walkbar = document.getElementById("walkbar");
+function walkShow(){
+  const step = WALK[walkIdx];
+  document.querySelectorAll(".node").forEach(el=>el.classList.remove("pulse"));
+  const el = document.getElementById("node-"+step.node);
+  el.classList.add("pulse");
+  el.scrollIntoView({behavior:"smooth", block:"center", inline:"center"});
+  selectNode(step.node);
+  document.getElementById("walkStep").textContent = `Step ${walkIdx+1} / ${WALK.length}`;
+  document.getElementById("walkText").textContent = step.text;
+}
+function walkStart(){ walkOn=true; walkIdx=0; applyFocus("all"); walkbar.classList.add("show"); walkShow(); }
+function walkNext(){ if(walkIdx<WALK.length-1){ walkIdx++; walkShow(); } else walkEnd(); }
+function walkPrev(){ if(walkIdx>0){ walkIdx--; walkShow(); } }
+function walkEnd(){ walkOn=false; walkbar.classList.remove("show");
+  document.querySelectorAll(".node").forEach(el=>el.classList.remove("pulse")); closeDrawer(); }
+document.getElementById("walkBtn").addEventListener("click", ()=> walkOn?walkEnd():walkStart());
+</script>
+</body>
+</html>
