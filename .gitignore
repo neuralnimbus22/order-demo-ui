@@ -20,6 +20,7 @@
 /jmeter/results/
 /gatling/results/
 /gatling/target/
+/semgrep/results/
 
 # next.js
 /.next/

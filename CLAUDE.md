@@ -399,6 +399,29 @@ Cypress/Selenium suites (next) — and ultimately TestKube — all behave identi
     `/orders/[id]` (so `test:a11y` is red by design); `/login`/`/register`/`/cart`/
     `/checkout` pass. The gate was NOT loosened and app components were NOT edited
     to force green — fixing is a separate decision.
+- **SAST / Semgrep** (security test TYPE, chunk 14) — `semgrep/run.sh`,
+  `npm run test:sast`. Static analysis of the **source** for vulnerable patterns;
+  does NOT run the app or use `E2E_BASE_URL` (source-time security). Pairs with
+  Trivy (next, artifact-time CVE scan of the image) for the full security story.
+  - **Semgrep over CodeQL:** a self-contained CLI/container that drops into any CI
+    (Jenkins/GitLab/GitHub) and TestKube — preserves the CI-agnostic story; CodeQL
+    is GitHub-Actions-native and would undercut it.
+  - **Pinned container** `semgrep/semgrep:1.97.0` (engine pinned in the tag; rule
+    *content* fetched from the registry at scan time — needs network). No Python on
+    the host; isolated from `npm run build`/`lint`.
+  - **Scope:** explicit target paths `app/ lib/ components/` (the shipped app incl.
+    BFF). Excluded (never visited): `e2e/`/`cypress/`/`selenium/`/`jmeter/`/`gatling/`,
+    `node_modules`, `.next`, `public`, `k8s` (deploy YAML = infra-scan, not app SAST).
+  - **Rulesets:** `p/typescript`, `p/javascript`, `p/react`, `p/nextjs`,
+    `p/security-audit`, `p/secrets`.
+  - **Gate:** `GATED_SEVERITY=ERROR` constant in `run.sh` — exits non-zero only on
+    ERROR; WARNING/INFO reported, not gated (mirrors axe). NOTE: security-audit
+    rules are often WARNING, so they report-but-don't-gate; widen the constant to
+    gate them. A non-completing scan (bad config / no registry network) exits 2
+    loudly — never silently green.
+  - **Current result:** clean — **0 findings at any severity** (335 rules loaded,
+    125 applicable ran on 42 files, all 6 configs resolved, `errors: []`). Honestly
+    green, not massaged. JSON → `semgrep/results/` (gitignored).
 
 ---
 
