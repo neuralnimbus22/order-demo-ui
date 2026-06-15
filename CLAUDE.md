@@ -445,6 +445,34 @@ Cypress/Selenium suites (next) — and ultimately TestKube — all behave identi
     and bundled node deps (`cross-spawn`, `glob`, `minimatch`, `tar`). Surfaced,
     NOT fixed — no Dockerfile/dep bumps, no gate-loosening, no blanket-ignores.
     Bumping the base image / deps vs. documenting is a separate decision.
+- **BFF API contract / Newman** (API-contract test TYPE, chunk 16) —
+  `newman/order-demo-bff.postman_collection.json` + `newman/run.sh`,
+  `npm run test:bff-contract`. Headless contract tests of the **Next.js BFF
+  `/api/*`** — status + response SCHEMA per route (the shape the browser depends
+  on). **This is the BFF LAYER**, distinct from the backend repo's service-level
+  `tests/<service>/` — same tool family (Newman/Postman), different layer, no
+  overlap. Name it "BFF API contract" everywhere.
+  - **Pinned container** `postman/newman:6.1.3-alpine` (verified by pull).
+    Targets `E2E_BASE_URL` (app assumed already running, backend reachable behind
+    the BFF). Newman exits non-zero on any assertion failure (native gate) or run
+    error — no wrapper parsing.
+  - **Cookie handling:** login captures the `session` value from `Set-Cookie`
+    into a collection variable; gated requests set `Cookie: session={{…}}`
+    explicitly (deterministic — doesn't rely on Newman's jar resending a `Secure`
+    cookie over http).
+  - **Checkout posture:** guards only — logged-out → 401, empty cart → 400. NO
+    successful order placed by default (would pollute inventory; same posture as
+    the load tests). Register creates one benign user row per run (unique email),
+    like the functional suites.
+  - **Container→host:** `run.sh` rewrites a `localhost`/`127.0.0.1` target to
+    `host.docker.internal` (+ host-gateway) so the container reaches the host
+    app; a real hostname (deployed/in-cluster/TestKube) passes through UNTOUCHED
+    — the conditional is what keeps it portable to the orchestration phase.
+  - **Schema:** `pm.response.to.have.jsonSchema` + explicit typed-field checks
+    (`price` number, `waitingFor` array). Result: **37/37 assertions pass** vs
+    the real BFF; verified the gate has teeth — a down target and a wrong-contract
+    target both exit non-zero (the latter fails 35/37). JSON → `newman/results/`
+    (gitignored).
 
 ---
 

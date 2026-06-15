@@ -15,7 +15,8 @@
     "test:load": "bash jmeter/run.sh",
     "test:load:gatling": "bash gatling/run.sh",
     "test:sast": "bash semgrep/run.sh",
-    "test:trivy": "bash trivy/run.sh"
+    "test:trivy": "bash trivy/run.sh",
+    "test:bff-contract": "bash newman/run.sh"
   },
   "dependencies": {
     "next": "16.2.9",
