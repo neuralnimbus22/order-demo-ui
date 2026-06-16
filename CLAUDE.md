@@ -161,6 +161,14 @@ service.
   relaxes it so the browser keeps the cookie over plain HTTP. Only the exact
   string `"true"` opts out. The real fix is TLS/Ingress on the test deployment —
   deferred.
+  - **Must be a RUNTIME read** (`lib/session.ts` → `cookieInsecure()` via
+    `globalThis.process?.env?.["COOKIE_INSECURE"]`). `next build` (DefinePlugin)
+    statically INLINES the literal `process.env.COOKIE_INSECURE` chain at build
+    time — and the var is unset during the Docker build, so the direct form bakes
+    `secure:true` into the standalone bundle and ignores the runtime env. The
+    `globalThis` + bracket-access form is not that pattern, so it survives as a
+    live per-request lookup. Do NOT revert to `process.env.COOKIE_INSECURE`, and
+    do NOT bake it via a Docker build-arg — the image stays secure-by-default.
 - Protected pages use the server-component guard `requireSession()`
   (`lib/auth.ts`) rather than middleware: the validate call runs only where a
   page actually needs auth, and the guard hands the claims straight to the page.
