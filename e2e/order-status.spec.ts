@@ -30,6 +30,11 @@ async function logIn(page: Page) {
 test("convergence timeline reaches order-placed, payment-confirmed, fulfilled", async ({
   page,
 }) => {
+  // Live distributed convergence (order-placed → payment-confirmed → Kafka →
+  // inventory) can take longer than Playwright's default 30s test timeout once
+  // the three step waits below are raised to 60s each. Give the whole test room
+  // (3×60s + login/nav) so it fails only on real non-convergence, not the cap.
+  test.setTimeout(150_000);
   await logIn(page);
   await page.goto(`/products/${KNOWN.sku}`);
   await page.getByTestId("detail-add").click();
@@ -45,17 +50,17 @@ test("convergence timeline reaches order-placed, payment-confirmed, fulfilled", 
   await expect(page.getByTestId("timeline-step-order")).toHaveAttribute(
     "data-state",
     "done",
-    { timeout: 20_000 },
+    { timeout: 60_000 },
   );
   await expect(page.getByTestId("timeline-step-payment")).toHaveAttribute(
     "data-state",
     "done",
-    { timeout: 20_000 },
+    { timeout: 60_000 },
   );
   await expect(page.getByTestId("timeline-step-fulfilled")).toHaveAttribute(
     "data-state",
     "done",
-    { timeout: 20_000 },
+    { timeout: 60_000 },
   );
   await expect(page.getByTestId("terminal-fulfilled")).toBeVisible();
   await expect(page.getByTestId("order-badge-fulfilled")).toBeVisible();
