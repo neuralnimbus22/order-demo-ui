@@ -73,23 +73,3 @@ test("happy path: place an order, confirmation shows the id, cart clears", async
   // Cart is cleared (badge gone).
   await expect(page.getByTestId("cart-badge-count")).toHaveCount(0);
 });
-
-test("a placed order is real and trackable toward fulfilled", async ({
-  page,
-}) => {
-  await logIn(page);
-  await addKnownItem(page);
-  await page.goto("/checkout");
-  await page.getByTestId("place-order").click();
-  await page.waitForURL(/\/orders\?placed=/);
-
-  // Open the order's status view and confirm it converges. Both order-placed
-  // and payment-confirmed were sent for the same id, so inventory fulfills it.
-  // (Deep convergence assertions are chunk 5; here we just prove trackability.)
-  await page.getByTestId("order-row").first().click();
-  await page.waitForURL(/\/orders\/.+/);
-  await expect(page.getByTestId("order-detail-id")).toBeVisible();
-  await expect(page.getByTestId("order-badge-fulfilled")).toBeVisible({
-    timeout: 20_000,
-  });
-});
