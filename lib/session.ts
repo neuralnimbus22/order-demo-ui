@@ -6,7 +6,11 @@ export const SESSION_COOKIE = "session";
 export function sessionCookieOptions(maxAge: number) {
   return {
     httpOnly: true, // never readable from browser JS
-    secure: true, // localhost counts as a secure context, so dev works too
+    // Secure by default (production). COOKIE_INSECURE=true is set ONLY in the
+    // no-TLS in-cluster test environment, where the browser would otherwise drop
+    // a Secure cookie over plain HTTP. Anything other than the exact string
+    // "true" stays secure — so production cannot accidentally become insecure.
+    secure: process.env.COOKIE_INSECURE !== "true",
     sameSite: "lax" as const,
     path: "/",
     maxAge, // seconds; 0 deletes the cookie

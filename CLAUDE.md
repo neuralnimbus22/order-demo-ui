@@ -156,6 +156,11 @@ service.
   user-session `/validate`; clears the cookie on a stale/expired token).
 - Cookie: name `session`, httpOnly, secure, sameSite=lax, path=/, maxAge derived
   from the JWT `exp` claim (decode-only; `/validate` remains the authority).
+- Cookie `secure` is **secure-by-default** but env-driven: `COOKIE_INSECURE=true`
+  (set ONLY in the no-TLS in-cluster test deployment, `k8s/order-demo-ui.yaml`)
+  relaxes it so the browser keeps the cookie over plain HTTP. Only the exact
+  string `"true"` opts out. The real fix is TLS/Ingress on the test deployment —
+  deferred.
 - Protected pages use the server-component guard `requireSession()`
   (`lib/auth.ts`) rather than middleware: the validate call runs only where a
   page actually needs auth, and the guard hands the claims straight to the page.
