@@ -67,6 +67,12 @@ spec:
                 secretKeyRef:
                   name: order-demo-ui
                   key: session-secret
+            # This is the no-TLS test/UAT deployment reached over plain HTTP, so
+            # the session cookie must NOT be Secure (the browser drops a Secure
+            # cookie over HTTP → no session → authed tests fail). Secure stays
+            # the default everywhere else; the real fix is TLS/Ingress (deferred).
+            - name: COOKIE_INSECURE
+              value: "true"
           resources:
             # Next.js needs more headroom than the node services (SSR per
             # request), hence larger bounds than the backend's 100m/250m.
