@@ -1,9 +1,19 @@
 import { test, expect, type Page } from "@playwright/test";
 
-// Order-status convergence view (/orders/[id]).
+// LIVE-BACKEND CONVERGENCE — the most environment-coupled e2e tests, kept in
+// their own deliberately-SLOW suite, separate from the fast functional run.
 //
-// The happy-path test drives the REAL backend through the BFF and needs the
-// five services port-forwarded (same as e2e/checkout.spec.ts):
+// The convergence test drives REAL distributed event convergence through the
+// BFF: order publishes order-placed and payment publishes payment-confirmed for
+// the SAME id, both flow through Kafka, and inventory only marks the order
+// fulfilled once BOTH have arrived. That can take tens of seconds against a live
+// backend, so the step assertions use generous (60s) timeouts and the test sets
+// its own 150s budget — it should fail only on real non-convergence, not a cap.
+//
+// Run it on its own (NOT part of `npm run test:e2e`):
+//   npm run test:e2e:convergence            (playwright --project=convergence)
+// It needs the five backend services reachable through the BFF (port-forward
+// them, or run against the deployed stack):
 //   kubectl -n order-demo port-forward svc/user-session    3006:3006 &
 //   kubectl -n order-demo port-forward svc/product-catalog 3005:3005 &
 //   kubectl -n order-demo port-forward svc/order           3002:3002 &
