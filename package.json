@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test:e2e": "playwright test --project=chromium",
     "test:a11y": "playwright test --project=a11y",
+    "test:e2e:convergence": "playwright test --project=convergence",
     "test:cypress": "cypress run",
     "cypress:open": "cypress open",
     "test:selenium": "mocha --config selenium/.mocharc.json",

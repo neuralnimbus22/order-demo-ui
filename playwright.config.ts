@@ -26,12 +26,13 @@ export default defineConfig({
   },
   projects: [
     {
-      // Functional suite — the original specs. Ignores the accessibility spec
-      // so `playwright test --project=chromium` (npm run test:e2e) runs exactly
-      // the functional tests, unchanged.
+      // Functional suite — the fast, deterministic specs. Ignores the
+      // accessibility spec AND the slow live-backend convergence spec, so
+      // `playwright test --project=chromium` (npm run test:e2e) runs exactly the
+      // fast functional tests, unchanged.
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: "**/a11y.spec.ts",
+      testIgnore: ["**/a11y.spec.ts", "**/convergence.spec.ts"],
     },
     {
       // Accessibility (axe-core) — a different test TYPE, isolated in its own
@@ -40,6 +41,14 @@ export default defineConfig({
       name: "a11y",
       use: { ...devices["Desktop Chrome"] },
       testMatch: "**/a11y.spec.ts",
+    },
+    {
+      // Live-backend convergence — intentionally SLOW (real Kafka convergence),
+      // isolated so it runs only via `playwright test --project=convergence`
+      // (npm run test:e2e:convergence) and never slows the fast functional run.
+      name: "convergence",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: "**/convergence.spec.ts",
     },
   ],
 });
