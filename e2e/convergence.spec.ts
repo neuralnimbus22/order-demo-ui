@@ -3,12 +3,14 @@ import { test, expect, type Page } from "@playwright/test";
 // LIVE-BACKEND CONVERGENCE — the most environment-coupled e2e tests, kept in
 // their own deliberately-SLOW suite, separate from the fast functional run.
 //
-// The convergence test drives REAL distributed event convergence through the
+// The convergence tests drive REAL distributed event convergence through the
 // BFF: order publishes order-placed and payment publishes payment-confirmed for
 // the SAME id, both flow through Kafka, and inventory only marks the order
 // fulfilled once BOTH have arrived. That can take tens of seconds against a live
-// backend, so the step assertions use generous (60s) timeouts and the test sets
-// its own 150s budget — it should fail only on real non-convergence, not a cap.
+// backend, so the step assertions use generous (60s) timeouts and the tests set
+// their own 150s budget — they should fail only on real non-convergence, not a
+// cap. (The "trackable toward fulfilled" test waits on the same fulfilled signal
+// from the order detail view; the timeline test asserts each step in between.)
 //
 // Run it on its own (NOT part of `npm run test:e2e`):
 //   npm run test:e2e:convergence            (playwright --project=convergence)
@@ -35,6 +37,12 @@ async function logIn(page: Page) {
   await page.getByTestId("login-password").fill(SEEDED_PASSWORD);
   await page.getByTestId("login-submit").click();
   await page.waitForURL("**/account");
+}
+
+async function addKnownItem(page: Page) {
+  await page.goto(`/products/${KNOWN.sku}`);
+  await page.getByTestId("detail-add").click();
+  await expect(page.getByTestId("cart-badge-count")).toHaveText("1");
 }
 
 test("convergence timeline reaches order-placed, payment-confirmed, fulfilled", async ({
@@ -121,4 +129,28 @@ test("a rejected order shows the terminal couldn't-place state and does NOT poll
   // Give any (incorrect) poll a chance to fire, then assert none did.
   await page.waitForTimeout(2500);
   expect(polled).toBe(false);
+});
+
+test("a placed order is real and trackable toward fulfilled", async ({
+  page,
+}) => {
+  // Same live convergence dependency as the timeline test: the fulfilled badge
+  // only appears once BOTH order-placed and payment-confirmed have flowed
+  // through Kafka into inventory for this id. Give it the suite's generous
+  // budget so it fails only on real non-convergence, not a too-tight cap.
+  test.setTimeout(150_000);
+  await logIn(page);
+  await addKnownItem(page);
+  await page.goto("/checkout");
+  await page.getByTestId("place-order").click();
+  await page.waitForURL(/\/orders\?placed=/);
+
+  // Open the order's status view and confirm it converges. Both order-placed
+  // and payment-confirmed were sent for the same id, so inventory fulfills it.
+  await page.getByTestId("order-row").first().click();
+  await page.waitForURL(/\/orders\/.+/);
+  await expect(page.getByTestId("order-detail-id")).toBeVisible();
+  await expect(page.getByTestId("order-badge-fulfilled")).toBeVisible({
+    timeout: 60_000,
+  });
 });
