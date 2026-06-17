@@ -32,6 +32,13 @@ export function buildDriver(): Promise<WebDriver> {
     "--disable-dev-shm-usage",
     "--window-size=1280,900",
   );
+  // Allow pointing at a specific Chrome/Chromium binary (e.g. in-cluster arm64
+  // nodes have only chromium, not google-chrome-stable). Chromium speaks the
+  // same chromedriver protocol, so forBrowser("chrome") stays correct — only
+  // the binary path changes. Unset → Selenium's default Chrome resolution.
+  if (process.env.CHROME_BIN) {
+    options.setChromeBinaryPath(process.env.CHROME_BIN);
+  }
   return new Builder().forBrowser("chrome").setChromeOptions(options).build();
 }
 
