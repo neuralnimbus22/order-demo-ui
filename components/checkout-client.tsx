@@ -1,5 +1,6 @@
 "use client";
 
+// demo: trigger sentinel
 // Checkout review + place-order. Reads the cart (client state), POSTs it to the
 // BFF /api/checkout (which runs the per-line correlation-id flow server-side),
 // then persists the placed ids to localStorage and routes to the per-order
