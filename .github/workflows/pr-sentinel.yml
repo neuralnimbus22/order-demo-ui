@@ -11,7 +11,7 @@ jobs:
       - name: Trigger TestKube PR Sentinel
         run: |
           curl -X POST \
-            "https://api.testkube.io/organizations/tkcorg_b5ace2135f138dc8/environments/tkcenv_362177294460621a/test-workflows/pr-sentinel/executions" \
+            "https://api.testkube.io/organizations/tkcorg_b5ace2135f138dc8/environments/tkcenv_362177294460621a/agent/test-workflows/pr-sentinel/executions" \
             -H "Authorization: Bearer ${{ secrets.TESTKUBE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{
