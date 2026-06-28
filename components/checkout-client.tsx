@@ -184,7 +184,7 @@ export default function CheckoutClient() {
             disabled={placing}
             className="mt-6 w-full rounded-full bg-indigo-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {placing ? "Placing order…" : "Place order"}
+            {placing ? "Placing order…" : "Place Order Now"}
           </button>
           <p className="mt-3 text-center text-xs text-stone-500">
             This is a demo store — no real payment is taken.
