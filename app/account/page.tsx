@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth";
+import AccountBadge from "@/components/account-badge";
 
 export const metadata: Metadata = { title: "Account" };
 
-// Protected: requireSession redirects to /login when there's no valid
-// session. This is the post-login landing until the storefront chunk gives
-// orders/history a richer home.
+// Protected: requireSession redirects to /login when there's no valid session.
 export default async function AccountPage() {
   const session = await requireSession();
   return (
@@ -19,10 +18,9 @@ export default async function AccountPage() {
           {session.email}
         </span>
       </p>
-      <div className="mt-10 rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center">
-        <p className="text-sm text-stone-600">
-          Your orders will appear here once the storefront opens.
-        </p>
+      <div className="mt-8 inline-flex items-center gap-2.5 rounded-2xl border border-stone-200 bg-white px-5 py-4">
+        <AccountBadge />
+        <span className="text-sm text-stone-600">orders placed</span>
       </div>
     </main>
   );
