@@ -20,7 +20,7 @@ export default async function Home() {
           Sundry
         </p>
         <h1 className="mt-3 max-w-2xl text-4xl font-semibold tracking-tight text-stone-900 sm:text-5xl">
-          Everyday goods, without the fuss.
+          Order Smarter. Deliver Faster.
         </h1>
         <p className="mt-3 max-w-md text-base leading-7 text-stone-600">
           Home, kitchen, office, and garden essentials — picked plain, priced
