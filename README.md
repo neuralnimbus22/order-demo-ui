@@ -394,3 +394,31 @@ in the manifest; rotate it with `kubectl apply` or a secret manager).
 bare-IP `http://` LoadBalancer would silently drop the cookie and break
 login. The Service is ClusterIP on purpose; making it shareable later is a
 one-line change *plus* TLS in front.
+
+## AI-Driven Test Selection (Sentinel Pattern)
+
+This repository uses an AI-driven test selection pattern powered by TestKube.
+When a pull request is opened or updated, the following automated flow runs:
+
+1. **GitHub Actions** (`.github/workflows/pr-sentinel.yml`) fires on every PR
+   open, update, or reopen and calls the TestKube API to trigger a lightweight
+   sentinel workflow (`pr-sentinel`) in the TestKube control plane.
+
+2. **Sentinel workflow** (`pr-sentinel`) is a no-op workflow in TestKube labeled
+   `tier=sentinel, app=order-demo-ui`. It does nothing except complete
+   successfully, giving the AI Trigger something to react to.
+
+3. **AI Trigger** (`pr-sentinel-ai-trigger`) watches for any workflow with
+   `tier=sentinel, app=order-demo-ui` completing successfully and fires the
+   AI Agent.
+
+4. **AI Agent** (`ai-pr-test-orchestrator`) reads the PR diff via the GitHub
+   MCP, classifies the changes, and routes to the appropriate test suite:
+   - UI/component changes → triggers `ui-full-regression`
+   - Test-only changes → triggers `ui-quick-check`
+   - Docs/config only → skips all tests and explains why
+
+### Demo branches
+Branches prefixed with `feature/`, `test/`, `chore/`, or `docs/` opened as
+PRs against main are ephemeral demo branches. They are closed and deleted
+after the demo without merging.
