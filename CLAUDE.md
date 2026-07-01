@@ -533,3 +533,28 @@ distinct failure signatures to diagnose. This UI adds the **UI-test layer**: the
 business flows, now driven through a browser with Playwright — and eventually run
 in-cluster as TestKube TestWorkflows against the deployed UI. The correlation-id checkout
 means a UI test also exercises the real event-driven convergence end to end, not a mock.
+
+## AI Sentinel Pattern
+
+This repo implements AI-driven test selection via a sentinel pattern.
+
+### Components
+- `.github/workflows/pr-sentinel.yml` — GitHub Actions workflow that fires
+  on PR open/sync/reopen and calls the TestKube API to run `pr-sentinel`
+- `pr-sentinel` — no-op TestWorkflow in TestKube control plane, labels:
+  `tier=sentinel, app=order-demo-ui, purpose=ai-trigger`
+- `pr-sentinel-ai-trigger` — AI Trigger in TestKube watching for
+  `tier=sentinel, app=order-demo-ui` + Test Workflow Success
+- `ai-pr-test-orchestrator` — AI Agent that reads PR diff via GitHub MCP
+  and routes to `ui-full-regression` or `ui-quick-check`
+
+### Routing logic
+| Files changed | Suite triggered |
+|---|---|
+| `app/`, `components/`, `pages/`, `styles/`, `lib/`, `public/` | `ui-full-regression` |
+| `*.spec.ts`, `*.test.ts`, `cypress/`, `playwright/`, `e2e/` | `ui-quick-check` |
+| `README.md`, `*.md`, `.github/`, comments only | skip — no tests |
+
+### Demo branches
+All PR branches in this repo are ephemeral demo branches. Close and delete
+after demo without merging. Never force push to main directly.
