@@ -247,6 +247,11 @@
               <stringProp name="Argument.value">${__P(region,unknown)} - order-demo-ui BFF load</stringProp>
               <stringProp name="Argument.metadata">=</stringProp>
             </elementProp>
+            <elementProp name="TAG_region" elementType="Argument">
+              <stringProp name="Argument.name">TAG_region</stringProp>
+              <stringProp name="Argument.value">${__P(region,unknown)}</stringProp>
+              <stringProp name="Argument.metadata">=</stringProp>
+            </elementProp>
             <elementProp name="eventsPerSecond" elementType="Argument">
               <stringProp name="Argument.name">eventsPerSecond</stringProp>
               <stringProp name="Argument.value">5</stringProp>
