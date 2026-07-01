@@ -78,7 +78,24 @@ data:
       "uid": "jmeter-order-demo-ui",
       "schemaVersion": 39,
       "tags": ["jmeter", "load", "order-demo-ui"],
-      "templating": { "list": [] },
+      "templating": {
+        "list": [
+          {
+            "name": "region",
+            "label": "Region",
+            "type": "query",
+            "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
+            "query": "SHOW TAG VALUES FROM \"jmeter\" WITH KEY = \"region\"",
+            "refresh": 2,
+            "multi": true,
+            "includeAll": true,
+            "sort": 1,
+            "hide": 0,
+            "current": {},
+            "options": []
+          }
+        ]
+      },
       "panels": [
         {
           "id": 1,
@@ -94,7 +111,8 @@ data:
               "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
               "rawQuery": true,
               "resultFormat": "time_series",
-              "query": "SELECT mean(\"meanAT\") FROM \"jmeter\" WHERE (\"transaction\" = 'internal') AND $timeFilter GROUP BY time($__interval) fill(null)"
+              "alias": "$tag_region",
+              "query": "SELECT mean(\"meanAT\") FROM \"jmeter\" WHERE (\"transaction\" = 'internal') AND \"region\" =~ /^$region$/ AND $timeFilter GROUP BY \"region\", time($__interval) fill(null)"
             }
           ]
         },
@@ -112,8 +130,8 @@ data:
               "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
               "rawQuery": true,
               "resultFormat": "time_series",
-              "alias": "requests",
-              "query": "SELECT sum(\"count\") FROM \"jmeter\" WHERE (\"transaction\" = 'all' AND \"statut\" = 'all') AND $timeFilter GROUP BY time($__interval) fill(0)"
+              "alias": "$tag_region",
+              "query": "SELECT sum(\"count\") FROM \"jmeter\" WHERE (\"transaction\" = 'all' AND \"statut\" = 'all') AND \"region\" =~ /^$region$/ AND $timeFilter GROUP BY \"region\", time($__interval) fill(0)"
             }
           ]
         },
@@ -131,16 +149,16 @@ data:
               "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
               "rawQuery": true,
               "resultFormat": "time_series",
-              "alias": "avg",
-              "query": "SELECT mean(\"avg\") FROM \"jmeter\" WHERE (\"transaction\" = 'all') AND $timeFilter GROUP BY time($__interval) fill(null)"
+              "alias": "avg — $tag_region",
+              "query": "SELECT mean(\"avg\") FROM \"jmeter\" WHERE (\"transaction\" = 'all') AND \"region\" =~ /^$region$/ AND $timeFilter GROUP BY \"region\", time($__interval) fill(null)"
             },
             {
               "refId": "B",
               "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
               "rawQuery": true,
               "resultFormat": "time_series",
-              "alias": "p95",
-              "query": "SELECT mean(\"pct95.0\") FROM \"jmeter\" WHERE (\"transaction\" = 'all') AND $timeFilter GROUP BY time($__interval) fill(null)"
+              "alias": "p95 — $tag_region",
+              "query": "SELECT mean(\"pct95.0\") FROM \"jmeter\" WHERE (\"transaction\" = 'all') AND \"region\" =~ /^$region$/ AND $timeFilter GROUP BY \"region\", time($__interval) fill(null)"
             }
           ]
         },
@@ -158,8 +176,8 @@ data:
               "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
               "rawQuery": true,
               "resultFormat": "time_series",
-              "alias": "errors",
-              "query": "SELECT sum(\"countError\") FROM \"jmeter\" WHERE (\"transaction\" = 'all' AND \"statut\" = 'all') AND $timeFilter GROUP BY time($__interval) fill(0)"
+              "alias": "$tag_region",
+              "query": "SELECT sum(\"countError\") FROM \"jmeter\" WHERE (\"transaction\" = 'all' AND \"statut\" = 'all') AND \"region\" =~ /^$region$/ AND $timeFilter GROUP BY \"region\", time($__interval) fill(0)"
             }
           ]
         },
@@ -177,8 +195,8 @@ data:
               "datasource": { "type": "influxdb", "uid": "jmeter_influxdb" },
               "rawQuery": true,
               "resultFormat": "time_series",
-              "alias": "$tag_transaction",
-              "query": "SELECT mean(\"avg\") FROM \"jmeter\" WHERE (\"transaction\" =~ /^GET/) AND $timeFilter GROUP BY \"transaction\", time($__interval) fill(null)"
+              "alias": "$tag_region - $tag_transaction",
+              "query": "SELECT mean(\"avg\") FROM \"jmeter\" WHERE (\"transaction\" =~ /^GET/) AND \"region\" =~ /^$region$/ AND $timeFilter GROUP BY \"region\", \"transaction\", time($__interval) fill(null)"
             }
           ]
         }
