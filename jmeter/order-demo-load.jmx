@@ -244,7 +244,7 @@
             </elementProp>
             <elementProp name="testTitle" elementType="Argument">
               <stringProp name="Argument.name">testTitle</stringProp>
-              <stringProp name="Argument.value">order-demo-ui BFF load</stringProp>
+              <stringProp name="Argument.value">${__P(region,unknown)} - order-demo-ui BFF load</stringProp>
               <stringProp name="Argument.metadata">=</stringProp>
             </elementProp>
             <elementProp name="eventsPerSecond" elementType="Argument">
