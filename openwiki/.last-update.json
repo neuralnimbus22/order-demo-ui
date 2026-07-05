@@ -1,0 +1,6 @@
+{
+  "generator": "claude-code (OpenWiki format, manual generation — CLI not run)",
+  "gitHead": "03e028f4b47c96deda9a0eb1fa7f71b79cb2b4ae",
+  "updatedAt": "2026-07-05T00:27:43Z",
+  "note": "Refresh with the /update-wiki slash command; the entrypoint is openwiki/quickstart.md."
+}
