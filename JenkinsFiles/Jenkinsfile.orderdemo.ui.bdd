@@ -11,10 +11,17 @@ spec:
     imagePullPolicy: IfNotPresent
     command: ["sleep"]
     args: ["9999999"]
+    volumeMounts:
+    - name: maven-cache
+      mountPath: /m2repo
     resources:
       requests:
         memory: "2Gi"
         cpu: "500m"
+  volumes:
+  - name: maven-cache
+    persistentVolumeClaim:
+      claimName: maven-cache
 """
         }
     }
@@ -46,7 +53,7 @@ spec:
         stage('Build') {
             steps {
                 container('maven') {
-                    sh "mvn -f bdd/pom.xml clean verify -Dui.base.url=${params.BaseUrl} -Denv=${params.Environment}"
+                    sh "mvn -f bdd/pom.xml -Dmaven.repo.local=/m2repo clean verify -Dui.base.url=${params.BaseUrl} -Denv=${params.Environment}"
                 }
             }
         }
