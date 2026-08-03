@@ -1,0 +1,41 @@
+pipeline {
+    agent {
+        label 'maven-jdk17-chrome'
+    }
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10', daysToKeepStr: '10'))
+    }
+    parameters {
+        string(name: 'Environment', defaultValue: 'test')
+        string(name: 'BaseUrl', defaultValue: 'http://order-demo-ui.order-demo.svc.cluster.local:3000')
+        string(name: 'TestCycleName', defaultValue: 'Order Demo UI BDD Automated Run')
+    }
+    triggers {
+        cron "TZ=America/Toronto\nH H(0-7) * * 1-5"
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Get Env variables') {
+            steps {
+                script {
+                    echo "Resolving environment for ${params.Environment}"
+                    env.E2E_BASE_URL = params.BaseUrl
+                }
+            }
+        }
+        stage('Build') {
+            steps {
+                sh "mvn -f bdd/pom.xml clean verify -Dui.base.url=${params.BaseUrl} -Denv=${params.Environment}"
+            }
+        }
+    }
+    post {
+        always {
+            junit testResults: 'bdd/target/surefire-reports/*.xml', allowEmptyResults: true
+        }
+    }
+}
