@@ -6,9 +6,11 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: jnlp
+  - name: maven
     image: maven-jdk21-chrome:local
     imagePullPolicy: IfNotPresent
+    command: ["sleep"]
+    args: ["9999999"]
     resources:
       requests:
         memory: "2Gi"
@@ -43,13 +45,15 @@ spec:
         }
         stage('Build') {
             steps {
-                sh "mvn -f bdd/pom.xml clean verify -Dui.base.url=${params.BaseUrl} -Denv=${params.Environment}"
+                container('maven') {
+                    sh "mvn -f bdd/pom.xml clean verify -Dui.base.url=${params.BaseUrl} -Denv=${params.Environment}"
+                }
             }
         }
     }
     post {
         always {
-            junit testResults: 'bdd/target/surefire-reports/*.xml', allowEmptyResults: true
+            archiveArtifacts artifacts: 'bdd/target/surefire-reports/*.xml', allowEmptyArchive: true
         }
     }
 }
