@@ -1,6 +1,20 @@
 pipeline {
     agent {
-        label 'maven-jdk17-chrome'
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: jnlp
+    image: maven-jdk21-chrome:local
+    imagePullPolicy: IfNotPresent
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "500m"
+"""
+        }
     }
     options {
         buildDiscarder(logRotator(numToKeepStr: '10', daysToKeepStr: '10'))
