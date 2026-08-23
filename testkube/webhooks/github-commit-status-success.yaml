@@ -1,0 +1,34 @@
+# Resolves the pending commit status to "success" when a release-gate
+# execution passes.
+#
+# Apply with: kubectl apply -f testkube/webhooks/ -n <agent-namespace>
+# (agent namespace for this environment is lakshmi-testkube)
+#
+# Requires a Testkube credential named "github-status-token" holding a GitHub
+# token with repo:status scope. This file deliberately contains no token --
+# only a reference to one. See testkube/webhooks/README.md.
+apiVersion: executor.testkube.io/v1
+kind: Webhook
+metadata:
+  name: github-commit-status-success
+  namespace: lakshmi-testkube
+spec:
+  events:
+    - end-testworkflow-success
+  # Matches the five release-gate workflows by their workflow-level label.
+  selector: purpose=release-decision-demo
+  # The full 40-char SHA travels on the execution as the "sha" tag, set by
+  # .github/workflows/testkube-release-gate.yml.
+  uri: https://api.github.com/repos/neuralnimbus22/order-demo-ui/statuses/{{ index .TestWorkflowExecution.Tags "sha" }}
+  headers:
+    Authorization: 'Bearer {{credential("github-status-token")}}'
+    Accept: application/vnd.github+json
+    Content-Type: application/json
+    X-GitHub-Api-Version: "2022-11-28"
+  payloadTemplate: |
+    {
+      "state": "success",
+      "context": "testkube/{{ .TestWorkflowExecution.Workflow.Name }}",
+      "description": "Passed in {{ .TestWorkflowExecution.Result.Duration }} (release {{ index .TestWorkflowExecution.Tags "release" }})",
+      "target_url": "{{ .ExecutionURL }}"
+    }

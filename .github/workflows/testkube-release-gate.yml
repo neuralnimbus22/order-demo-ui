@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+  statuses: write
+
 jobs:
   release-gate:
     runs-on: ubuntu-latest
@@ -28,44 +32,41 @@ jobs:
             trigger="main"
           fi
           {
+            echo "sha=$sha"
             echo "commit=$(echo "$sha" | cut -c1-7)"
             echo "release=$(date -u +%Y.%m.%d)-${{ github.run_number }}"
             echo "trigger=$trigger"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Run Testkube workflows
+      - name: Fire Testkube workflows and set pending statuses
         env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.meta.outputs.sha }}
           COMMIT: ${{ steps.meta.outputs.commit }}
           RELEASE: ${{ steps.meta.outputs.release }}
           TRIGGER: ${{ steps.meta.outputs.trigger }}
         run: |
-          set -uo pipefail
+          set -euo pipefail
           workflows="coordinator-check attack-agents-check validators-check surface-mapper-check findings-pipeline-check"
 
-          # Fan out on a single runner: the cluster does the work, this job just
-          # holds the five watch streams open until they finish.
           for wf in $workflows; do
+            # Fire and do not watch. Without -f the CLI returns as soon as the
+            # execution is queued, so the runner is not billed for the suite.
             testkube run testworkflow "$wf" \
               --target name=testkube-se-runner-testkube-runner \
+              --tag "sha=$SHA" \
               --tag "commit=$COMMIT" \
               --tag "release=$RELEASE" \
               --tag "trigger=$TRIGGER" \
-              --tag "env=staging" \
-              -f > "$wf.log" 2>&1 &
-            echo "$! $wf" >> pids.txt
+              --tag "env=staging"
+
+            # The Testkube webhook resolves this to success/failure when the
+            # execution ends. See testkube/webhooks/ in this repo.
+            gh api "repos/${{ github.repository }}/statuses/$SHA" \
+              -f state=pending \
+              -f context="testkube/$wf" \
+              -f description="Queued on the cluster (release $RELEASE)" \
+              --silent
           done
 
-          failed=0
-          while read -r pid wf; do
-            if ! wait "$pid"; then
-              failed=1
-              status="FAILED"
-            else
-              status="passed"
-            fi
-            echo "::group::$wf ($status)"
-            cat "$wf.log"
-            echo "::endgroup::"
-          done < pids.txt
-
-          exit "$failed"
+          echo "All five queued. Runner exiting; results arrive by webhook."
