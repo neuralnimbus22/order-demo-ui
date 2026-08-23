@@ -1,0 +1,55 @@
+# CI-only copy of attack-agents-check.
+#
+# Exists so the GitHub release gate and the hourly scheduled run are separate
+# workflow objects. A Testkube webhook selector can only match workflow labels,
+# never execution tags, so it cannot tell a CI run from a cron run of the same
+# workflow. Splitting them is what makes `gate=release` a usable selector.
+#
+# Differences from attack-agents-check:
+#   - no spec.events (never runs on a schedule; CI triggers it)
+#   - labelled gate=release, NOT purpose=release-decision-demo
+#   - spec.execution.tags does not pin trigger; the pipeline always supplies it
+#
+# Apply with: kubectl apply -f testkube/workflows/
+kind: TestWorkflow
+apiVersion: testworkflows.testkube.io/v1
+metadata:
+  name: attack-agents-gate
+  namespace: lakshmi-testkube
+  labels:
+    component: attack-agents
+    gate: release
+spec:
+  container:
+    image: python:3.12-slim
+  job:
+    activeDeadlineSeconds: 300
+  execution:
+    tags:
+      component: attack-agents
+      env: staging
+  services:
+    remote:
+      logs: always
+      timeout: 5m
+      image: selenium/standalone-chrome:4.21.0-20240517
+      readinessProbe:
+        httpGet:
+          path: /wd/hub/status
+          port: 4444
+        periodSeconds: 1
+  steps:
+  - name: Agent drives a target through the headless browser
+    run:
+      shell: |
+        pip install --quiet selenium
+        python3 - <<'EOF'
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+
+        options = Options()
+        driver = webdriver.Remote(command_executor="http://{{services.remote.0.ip}}:4444/wd/hub", options=options)
+        driver.get("https://example.com")
+        print("TARGET REACHED:", driver.title)
+        driver.quit()
+        EOF

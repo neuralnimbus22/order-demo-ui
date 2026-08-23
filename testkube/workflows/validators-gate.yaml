@@ -1,0 +1,57 @@
+# CI-only copy of validators-check.
+#
+# Exists so the GitHub release gate and the hourly scheduled run are separate
+# workflow objects. A Testkube webhook selector can only match workflow labels,
+# never execution tags, so it cannot tell a CI run from a cron run of the same
+# workflow. Splitting them is what makes `gate=release` a usable selector.
+#
+# Differences from validators-check:
+#   - no spec.events (never runs on a schedule; CI triggers it)
+#   - labelled gate=release, NOT purpose=release-decision-demo
+#   - spec.execution.tags does not pin trigger; the pipeline always supplies it
+#
+# Apply with: kubectl apply -f testkube/workflows/
+kind: TestWorkflow
+apiVersion: testworkflows.testkube.io/v1
+metadata:
+  name: validators-gate
+  namespace: lakshmi-testkube
+  labels:
+    component: validators
+    gate: release
+spec:
+  container:
+    image: python:3.12-slim
+  job:
+    activeDeadlineSeconds: 300
+  execution:
+    tags:
+      component: validators
+      env: staging
+  services:
+    remote:
+      logs: always
+      timeout: 5m
+      image: selenium/standalone-chrome:4.21.0-20240517
+      readinessProbe:
+        httpGet:
+          path: /wd/hub/status
+          port: 4444
+        periodSeconds: 1
+  steps:
+  - name: Validator reproduces a finding end to end
+    run:
+      shell: |
+        pip install --quiet selenium
+        python3 - <<'EOF'
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+
+        options = Options()
+        driver = webdriver.Remote(command_executor="http://{{services.remote.0.ip}}:4444/wd/hub", options=options)
+        driver.get("https://example.com")
+        title = driver.title
+        assert title == "Example Domain", f"reproduction failed: {{"{"}}title}"
+        print("REPRODUCED:", title)
+        driver.quit()
+        EOF

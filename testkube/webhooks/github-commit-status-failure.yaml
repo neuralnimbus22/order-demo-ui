@@ -17,8 +17,11 @@ spec:
     - end-testworkflow-failed
     - end-testworkflow-aborted
     - end-testworkflow-canceled
-  # Matches the five release-gate workflows by their workflow-level label.
-  selector: purpose=release-decision-demo
+  # Matches only the five CI-only gate workflows (testkube/workflows/).
+  # NOT purpose=release-decision-demo: that label also covers the hourly
+  # cron workflows and four unrelated service checks, none of which carry
+  # a sha tag. See testkube/webhooks/README.md.
+  selector: gate=release
   # The full 40-char SHA travels on the execution as the "sha" tag, set by
   # .github/workflows/testkube-release-gate.yml.
   uri: https://api.github.com/repos/neuralnimbus22/order-demo-ui/statuses/{{ index .TestWorkflowExecution.Tags "sha" }}
