@@ -1,0 +1,71 @@
+name: Testkube Release Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Testkube CLI
+        uses: kubeshop/setup-testkube@v1
+        with:
+          organization: tkcorg_b5ace2135f138dc8
+          environment: tkcenv_362177294460621a
+          token: ${{ secrets.TESTKUBE_API_TOKEN }}
+
+      - name: Derive execution metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            sha="${{ github.event.pull_request.head.sha }}"
+            trigger="pr-${{ github.event.pull_request.number }}"
+          else
+            sha="${{ github.sha }}"
+            trigger="main"
+          fi
+          {
+            echo "commit=$(echo "$sha" | cut -c1-7)"
+            echo "release=$(date -u +%Y.%m.%d)-${{ github.run_number }}"
+            echo "trigger=$trigger"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run Testkube workflows
+        env:
+          COMMIT: ${{ steps.meta.outputs.commit }}
+          RELEASE: ${{ steps.meta.outputs.release }}
+          TRIGGER: ${{ steps.meta.outputs.trigger }}
+        run: |
+          set -uo pipefail
+          workflows="coordinator-check attack-agents-check validators-check surface-mapper-check findings-pipeline-check"
+
+          # Fan out on a single runner: the cluster does the work, this job just
+          # holds the five watch streams open until they finish.
+          for wf in $workflows; do
+            testkube run testworkflow "$wf" \
+              --target name=testkube-se-runner-testkube-runner \
+              --tag "commit=$COMMIT" \
+              --tag "release=$RELEASE" \
+              --tag "trigger=$TRIGGER" \
+              --tag "env=staging" \
+              -f > "$wf.log" 2>&1 &
+            echo "$! $wf" >> pids.txt
+          done
+
+          failed=0
+          while read -r pid wf; do
+            if ! wait "$pid"; then
+              failed=1
+              status="FAILED"
+            else
+              status="passed"
+            fi
+            echo "::group::$wf ($status)"
+            cat "$wf.log"
+            echo "::endgroup::"
+          done < pids.txt
+
+          exit "$failed"
