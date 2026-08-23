@@ -47,7 +47,10 @@ jobs:
           TRIGGER: ${{ steps.meta.outputs.trigger }}
         run: |
           set -euo pipefail
-          workflows="coordinator-check attack-agents-check validators-check surface-mapper-check findings-pipeline-check"
+          # The *-gate workflows are CI-only (testkube/workflows/). The *-check
+          # workflows they were copied from still run hourly on cron and are
+          # deliberately not touched here -- see testkube/webhooks/README.md.
+          workflows="coordinator-gate attack-agents-gate validators-gate surface-mapper-gate findings-pipeline-gate"
 
           for wf in $workflows; do
             # Fire and do not watch. Without -f the CLI returns as soon as the

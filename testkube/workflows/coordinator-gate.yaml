@@ -1,0 +1,47 @@
+# CI-only copy of coordinator-check.
+#
+# Exists so the GitHub release gate and the hourly scheduled run are separate
+# workflow objects. A Testkube webhook selector can only match workflow labels,
+# never execution tags, so it cannot tell a CI run from a cron run of the same
+# workflow. Splitting them is what makes `gate=release` a usable selector.
+#
+# Differences from coordinator-check:
+#   - no spec.events (never runs on a schedule; CI triggers it)
+#   - labelled gate=release, NOT purpose=release-decision-demo
+#   - spec.execution.tags does not pin trigger; the pipeline always supplies it
+#
+# Apply with: kubectl apply -f testkube/workflows/
+kind: TestWorkflow
+apiVersion: testworkflows.testkube.io/v1
+metadata:
+  name: coordinator-gate
+  namespace: lakshmi-testkube
+  labels:
+    component: coordinator
+    gate: release
+spec:
+  container:
+    image: curlimages/curl:8.9.1
+  job:
+    activeDeadlineSeconds: 300
+  execution:
+    tags:
+      component: coordinator
+      env: staging
+  services:
+    remote:
+      logs: always
+      timeout: 5m
+      image: selenium/standalone-chrome:4.21.0-20240517
+      readinessProbe:
+        httpGet:
+          path: /wd/hub/status
+          port: 4444
+        periodSeconds: 1
+  steps:
+  - name: Coordinator dispatch health
+    run:
+      shell: |
+        echo "Checking coordinator dispatch endpoint"
+        curl -sS -m 10 http://{{services.remote.0.ip}}:4444/wd/hub/status
+        echo ""
