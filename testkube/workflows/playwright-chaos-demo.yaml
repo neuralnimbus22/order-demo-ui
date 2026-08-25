@@ -1,0 +1,117 @@
+# playwright-chaos-demo, with a persistent npm cache.
+#
+# Apply with: kubectl apply -f testkube/cache/npm-cache-pvc.yaml
+#             kubectl apply -f testkube/workflows/playwright-chaos-demo.yaml
+# The PVC must exist first — the pod will sit in ContainerCreating otherwise.
+#
+# What changed vs. the live definition (execution #2, 4m25s total):
+#   1. spec.pod.volumes         -> claims the npm-cache PVC
+#   2. spec.pod.securityContext -> fsGroupChangePolicy: OnRootMismatch
+#   3. spec.container.env       -> points npm and Cypress at the mounted cache
+#   4. spec.container.volumeMounts -> mounts it for EVERY step
+#   5. "npm ci" -> "npm ci --prefer-offline --no-audit --no-fund"
+#
+# Why the cache directory and not node_modules:
+#   - npm ci deletes node_modules by design. Mounting a PVC there means every
+#     run either fights the mountpoint or needs a hand-written "is it stale?"
+#     guard keyed on package-lock.json. The npm cache needs no such guard: it is
+#     content-addressed by integrity hash, so a lockfile change is just a miss.
+#   - The git clone step is not a wipe-and-replace. RunClone clones to a temp
+#     dir, copies the contents over /data/repo, and then runs a recursive
+#     filepath.WalkDir + chmod across the whole destination. A populated
+#     node_modules mounted under /data/repo would be walked and stat'ed on every
+#     single run. /cache lives outside /data/repo and is never walked.
+#
+# Why volumeMounts sits at spec.container and not on a step:
+#   Container config is inherited down the step tree — a step's effective mounts
+#   are the sum of its parents' and its own. Declaring it once at spec.container
+#   gives it to "Install dependencies" and "Run tests" alike, which is required
+#   here: the two steps have to see the same directory. A whole TestWorkflow is
+#   one pod (steps become init containers plus a final container), so the two
+#   steps are sharing a mount inside a single pod, not across pods.
+#
+# NOT SAFE TO SHARD AS WRITTEN. This PVC is ReadWriteOnce and parallel workers
+# are separate pods on independently chosen nodes. See testkube/cache/README.md.
+kind: TestWorkflow
+apiVersion: testworkflows.testkube.io/v1
+metadata:
+  name: playwright-chaos-demo
+  namespace: lakshmi-testkube
+  labels:
+    tool: playwright
+    suite: e2e
+    purpose: chaos-demo
+    app: order-demo
+spec:
+  content:
+    git:
+      uri: https://github.com/neuralnimbus22/order-demo-ui
+      revision: main
+
+  pod:
+    volumes:
+      - name: npm-cache
+        persistentVolumeClaim:
+          claimName: npm-cache
+    securityContext:
+      # Testkube defaults the pod fsGroup to 1001. The default
+      # fsGroupChangePolicy is "Always", which recursively chowns the entire
+      # volume on every mount — on a cache holding tens of thousands of small
+      # files that hands back a slice of what the cache just saved.
+      # OnRootMismatch chowns only when the volume root's group is already
+      # wrong, i.e. once, on the very first run.
+      fsGroupChangePolicy: OnRootMismatch
+
+  container:
+    workingDir: /data/repo
+    image: mcr.microsoft.com/playwright:v1.60.0-jammy
+    env:
+      # Point npm at the mount instead of $HOME/.npm, which is inside the
+      # container filesystem and dies with the pod.
+      - name: npm_config_cache
+        value: /cache/npm
+      # cypress is a devDependency of this repo, so npm ci runs its postinstall
+      # and pulls the ~180MB Cypress binary on every run even though this
+      # workflow only ever invokes Playwright. Cypress caches to $HOME/.cache
+      # by default; redirect it onto the volume too.
+      - name: CYPRESS_CACHE_FOLDER
+        value: /cache/cypress
+    volumeMounts:
+      - name: npm-cache
+        mountPath: /cache/npm
+        subPath: npm
+      - name: npm-cache
+        mountPath: /cache/cypress
+        subPath: cypress
+
+  steps:
+    - name: Install dependencies
+      # --prefer-offline: use a cached tarball whenever the integrity hash
+      #   matches and only hit the registry for genuine misses. It does NOT
+      #   weaken the install: npm ci still reads package-lock.json and installs
+      #   exactly what is pinned there, so a lockfile change resolves the new
+      #   entries normally. There is nothing to invalidate by hand.
+      # --no-audit / --no-fund: two registry round trips whose output nobody
+      #   reads in CI.
+      shell: npm ci --prefer-offline --no-audit --no-fund
+
+    - name: Run tests
+      shell: |
+        npx playwright test \
+          --project=chromium \
+          --reporter=html
+      container:
+        env:
+          - name: E2E_BASE_URL
+            value: http://order-demo-ui.order-demo.svc.cluster.local:3000
+          - name: CI
+            value: "true"
+      artifacts:
+        paths:
+          - playwright-report/**
+
+  execution:
+    tags:
+      suite: playwright-e2e
+      target: order-demo
+      purpose: chaos-demo

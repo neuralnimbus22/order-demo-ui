@@ -1,0 +1,40 @@
+# Persistent npm cache for TestWorkflow runs.
+#
+# NOT applied by anything automatic. Apply by hand:
+#   kubectl apply -f testkube/cache/npm-cache-pvc.yaml
+#
+# Why a PVC and not spec.pvcs:
+#   TestWorkflow has a `spec.pvcs` field, but the processor names those claims
+#   "{{resource.root}}-<ref>" (per execution) and the execution-worker cleanup
+#   deletes them by the testkube.io/resource + testkube.io/root labels when the
+#   run finishes. They are per-execution scratch, not a cache. A cache has to be
+#   a claim that Testkube does not own, referenced by name from spec.pod.volumes.
+#
+# Access mode:
+#   ReadWriteOnce. Every StorageClass in this cluster is pd.csi.storage.gke.io,
+#   which is block storage and RWO-only; there is no RWX class installed. RWO is
+#   correct for a serial workflow (one pod per run). It is NOT safe for sharded
+#   runs — see testkube/cache/README.md.
+#
+# Binding mode is WaitForFirstConsumer on standard-rwo, so the PV is provisioned
+# in the zone of the first pod that mounts it and stays pinned there. This is a
+# single-zone cluster (us-central1-c), so that costs nothing today.
+#
+# Size: 573 packages plus the Cypress binary tarball. 10Gi leaves room for the
+# cache to accumulate entries for a few months of lockfile churn — neither npm's
+# cacache nor Maven prunes on its own.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: npm-cache
+  namespace: lakshmi-testkube
+  labels:
+    app.kubernetes.io/component: dependency-cache
+    cache: npm
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard-rwo
+  resources:
+    requests:
+      storage: 10Gi
