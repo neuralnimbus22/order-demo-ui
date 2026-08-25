@@ -30,8 +30,11 @@
 #   one pod (steps become init containers plus a final container), so the two
 #   steps are sharing a mount inside a single pod, not across pods.
 #
+#   6. spec.concurrency.max: 1 — see below, this one is not optional
+#
 # NOT SAFE TO SHARD AS WRITTEN. This PVC is ReadWriteOnce and parallel workers
-# are separate pods on independently chosen nodes. See testkube/cache/README.md.
+# are separate pods on independently chosen nodes. See testkube/cache/README.md
+# §4 for the scheduler and attach-detach mechanics and the ranked options.
 kind: TestWorkflow
 apiVersion: testworkflows.testkube.io/v1
 metadata:
@@ -47,6 +50,21 @@ spec:
     git:
       uri: https://github.com/neuralnimbus22/order-demo-ui
       revision: main
+
+  # Required once the cache is shared, not a nicety. Two executions of this
+  # workflow are two independent pods across five nodes; a ReadWriteOnce PD
+  # attaches to exactly one node at a time, and the Kubernetes attach-detach
+  # controller does not fail the loser — it emits a FailedAttachVolume event and
+  # retries forever, so the second pod sits in ContainerCreating. Testkube will
+  # not rescue it either: spec.timeouts.queue and spec.timeouts.initialization
+  # are declared in the CRD but carry "TODO: Finish implementation" and are read
+  # by nothing.
+  #
+  # max: 1 makes the overlap impossible instead of merely unlikely. The control
+  # plane leaves the second execution QUEUED rather than failing it, so a
+  # double-trigger degrades to a wait.
+  concurrency:
+    max: 1
 
   pod:
     volumes:
