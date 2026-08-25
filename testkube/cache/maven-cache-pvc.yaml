@@ -1,0 +1,28 @@
+# Persistent Maven local-repository cache for TestWorkflow runs.
+#
+# NOT applied by anything automatic. Apply by hand:
+#   kubectl apply -f testkube/cache/maven-cache-pvc.yaml
+#
+# Reference manifest for the Java customer case. Same mechanism as the npm one
+# (spec.pod.volumes + spec.container.volumeMounts); only the mount path and the
+# flag that points the tool at it change.
+#
+# Sizing: a Maven local repository is append-only and never self-prunes. A
+# Spring-Boot-shaped tree lands around 1-2Gi; 20Gi absorbs a few years of
+# version churn. Maven has no `npm cache verify` equivalent — plan on a
+# scheduled cleanup workflow rather than expecting it to plateau.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: maven-cache
+  namespace: lakshmi-testkube
+  labels:
+    app.kubernetes.io/component: dependency-cache
+    cache: maven
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard-rwo
+  resources:
+    requests:
+      storage: 20Gi

@@ -1,0 +1,95 @@
+# Reference manifest for the Java/Maven customer case. Not wired to this repo's
+# CI — it points at a placeholder git URI. Copy it, change spec.content.git.
+#
+# Apply with: kubectl apply -f testkube/cache/maven-cache-pvc.yaml
+#             kubectl apply -f testkube/workflows/maven-tests-cached.yaml
+#
+# The mechanism is identical to playwright-chaos-demo: a PVC Testkube does not
+# own, claimed at spec.pod.volumes, mounted at spec.container.volumeMounts so
+# every step inherits it. Only the path and the flag differ.
+#
+# -Dmaven.repo.local, not a mount over ~/.m2:
+#   ~/.m2 holds settings.xml and settings-security.xml as well as the
+#   repository. Mounting a shared volume over the whole directory puts CI
+#   credentials on a shared disk and lets one run's settings leak into another.
+#   -Dmaven.repo.local moves only the repository, which is the part that is
+#   expensive to rebuild and safe to share.
+#
+# Why there is no "cache vs. install directory" choice here:
+#   Node has two candidates — the npm cache and node_modules — because npm
+#   materialises a second copy into the project. Maven has one: the local
+#   repository IS the resolution target, and mvn reads jars straight out of it.
+#   So the Maven equivalent of "mount node_modules" doesn't exist. The real
+#   fork is whether to also go fully offline (mvn -o), and the answer is no:
+#   -o turns any dependency the cache happens to be missing into a hard build
+#   failure instead of a download, which trades a recurring 2 minutes for an
+#   occasional red build nobody can reproduce locally.
+kind: TestWorkflow
+apiVersion: testworkflows.testkube.io/v1
+metadata:
+  name: maven-tests-cached
+  namespace: lakshmi-testkube
+  labels:
+    tool: maven
+    suite: unit
+spec:
+  content:
+    git:
+      uri: https://github.com/example/java-service
+      revision: main
+
+  pod:
+    volumes:
+      - name: maven-cache
+        persistentVolumeClaim:
+          claimName: maven-cache
+    securityContext:
+      # See playwright-chaos-demo. A warm Maven repository is a very large
+      # number of very small files; the default "Always" policy recursively
+      # chowns all of them on every mount.
+      fsGroupChangePolicy: OnRootMismatch
+
+  container:
+    workingDir: /data/repo
+    image: maven:3.9-eclipse-temurin-21
+    env:
+      # MAVEN_OPTS is JVM flags and is the wrong place for this — Maven reads
+      # maven.repo.local as a Maven property. MAVEN_ARGS is appended to every
+      # mvn invocation by the official image's entrypoint, so it applies to
+      # every step without repeating the flag.
+      - name: MAVEN_ARGS
+        value: -Dmaven.repo.local=/cache/m2/repository -B -ntp
+    volumeMounts:
+      - name: maven-cache
+        mountPath: /cache/m2
+
+  steps:
+    # Split into resolve + test for the same reason the Node workflow is split:
+    # it puts the recurring cost on its own line in the execution timeline, so
+    # the before/after is legible. Both steps inherit the same mount.
+    - name: Resolve dependencies
+      # go-offline warms the repository without running anything. On a warm
+      # cache this is close to a no-op; on a cold one it is where the whole
+      # download cost lands, isolated from the test signal.
+      #
+      # Add -U here IF the project depends on SNAPSHOTs. A persistent local
+      # repository changes SNAPSHOT behaviour: Maven's default update policy is
+      # "daily", so with an ephemeral ~/.m2 every run was implicitly fresh, and
+      # with a shared one a stale SNAPSHOT can be served for up to 24 hours.
+      # -U also clears the negative cache — the "artifact was cached in the
+      # local repository, resolution will not be reattempted" entries that
+      # otherwise pin a transient registry failure into the volume for good.
+      # Release-version dependencies need none of this: the repository is
+      # addressed by groupId:artifactId:version and is append-only, so a
+      # pom.xml change resolves the new coordinates and leaves the rest alone.
+      shell: mvn dependency:go-offline
+
+    - name: Run tests
+      shell: mvn test
+      artifacts:
+        paths:
+          - target/surefire-reports/**
+
+  execution:
+    tags:
+      tool: maven
