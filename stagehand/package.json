@@ -1,0 +1,16 @@
+{
+  "name": "order-demo-ui-stagehand-journeys",
+  "private": true,
+  "description": "Storefront user journeys written in plain English and run by Stagehand",
+  "type": "module",
+  "scripts": {
+    "journeys": "node run.mjs"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@browserbasehq/stagehand": "4.1.0",
+    "zod": "4.4.3"
+  }
+}

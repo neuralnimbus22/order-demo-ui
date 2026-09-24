@@ -117,3 +117,20 @@ via `--input`; `TRIVY_IMAGE=<ref>` scans a published image instead. Scanners
 reported, not gated — failing on un-actionable CVEs just trains people to ignore the gate.
 A non-completing scan exits 2. Semgrep (source) + Trivy (artifact) together are the full
 security story; both **surface, they do not fix** (see [`CLAUDE.md`](../../CLAUDE.md)).
+
+## Stagehand: plain-English journeys (model-driven browser)
+
+`stagehand/run.mjs` (`cd stagehand && npm ci && node run.mjs`), Stagehand 4.1 with its own
+`package.json` and lockfile. The journeys in `stagehand/journeys.mjs` are written as a shopper
+would describe them ("Open the product page for the Hardcover Notebook"). Stagehand drives a
+real Chrome and asks a model what to click or type, so the steps name no selectors and no
+`data-testid`s. Three journeys, each in its own fresh browser: add a notebook to the cart;
+checkout asks a signed-out shopper to sign in; the seeded demo login buys a notebook and sees the
+order confirmation with a status. **Gate:** each journey ends with a check. Stagehand reads values
+off the page, and plain code decides pass or fail; the run exits `1` on any failed journey and
+`2` when it cannot start (no API key). Needs `LLM_API_KEY` (in Testkube, the credential
+`stagehand-llm-api-key`); `STAGEHAND_MODEL` defaults to `anthropic/claude-sonnet-5`. Output in
+`stagehand/results/`: `junit.xml`, one screenshot per journey, `results.json` with each step and
+the model tokens used. `stagehand/browser.mjs` starts Chrome with `--load-extension` because
+Stagehand's own launcher needs a DevTools command the Playwright image's Chromium does not offer
+(see `stagehand/README.md`). Testkube workflow: `testkube/workflows/stagehand-journeys.yaml`.

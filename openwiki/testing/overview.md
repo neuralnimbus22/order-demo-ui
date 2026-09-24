@@ -46,6 +46,7 @@ the [`data-testid` contract](../frontend.md#the-data-testid-contract) matters.
 | Newman | BFF API contract | `npm run test:bff-contract` | `newman/` |
 | Semgrep | SAST (source) | `npm run test:sast` | `semgrep/` |
 | Trivy | image CVE scan | `npm run test:trivy` | `trivy/` |
+| Stagehand | plain-English journeys, model-driven browser | `cd stagehand && npm ci && node run.mjs` | `stagehand/` |
 
 ## Build/lint isolation
 
@@ -59,6 +60,9 @@ Each non-Playwright suite is isolated from `npm run build` (`next build`) and
   excluded from the Docker build context via `.dockerignore`.
 - **BDD, Gatling, JMeter, Newman, Semgrep, Trivy** are self-contained (Maven / shell /
   Docker) and never touched by the Node build or lint.
+- **Stagehand** has its own `package.json` and lockfile under `stagehand/` (plain `.mjs`,
+  so the root `tsconfig.json` never includes it) and is in `eslint.config.mjs`
+  globalIgnores.
 
 ## Honest gates
 

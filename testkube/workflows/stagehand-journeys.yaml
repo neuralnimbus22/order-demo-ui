@@ -1,0 +1,52 @@
+# Storefront journeys in plain English, run by Stagehand (stagehand/).
+#
+# Needs one Testkube credential: stagehand-llm-api-key, the API key for the
+# model named in config.model. Each journey is a JUnit test case with a
+# screenshot. The label app=order-demo routes failures to the same Slack
+# webhook as the other storefront suites.
+#
+# Schedule: every hour from 15:00 to 23:00 UTC (08:00 to 16:00 Pacific
+# daylight time), Monday to Friday.
+kind: TestWorkflow
+apiVersion: testworkflows.testkube.io/v1
+metadata:
+  name: stagehand-journeys
+  namespace: lakshmi-testkube
+  labels:
+    app: order-demo
+    suite: exploratory
+    tool: stagehand
+spec:
+  config:
+    model:
+      type: string
+      default: anthropic/claude-sonnet-5
+      description: Model Stagehand uses, as provider/model
+  content:
+    git:
+      uri: https://github.com/neuralnimbus22/order-demo-ui
+      revision: main
+      paths:
+        - stagehand
+  container:
+    image: mcr.microsoft.com/playwright:v1.60.0-jammy
+    workingDir: /data/repo/stagehand
+    env:
+      - name: E2E_BASE_URL
+        value: http://order-demo-ui.order-demo.svc.cluster.local:3000
+      - name: STAGEHAND_MODEL
+        value: "{{config.model}}"
+      - name: LLM_API_KEY
+        value: '{{credential("stagehand-llm-api-key")}}'
+  steps:
+    - name: Install Stagehand
+      shell: npm ci --no-audit --no-fund
+    - name: Run the journeys
+      shell: node run.mjs
+      artifacts:
+        workingDir: /data/repo/stagehand/results
+        paths:
+          - "**/*"
+  events:
+    - cronjob:
+        cron: "0 15-23 * * 1-5"

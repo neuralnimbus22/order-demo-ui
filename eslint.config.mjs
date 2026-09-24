@@ -18,6 +18,9 @@ const eslintConfig = defineConfig([
     // Selenium specs (framework #3) likewise live under their own tsconfig +
     // Mocha runner; keep them out of the Next app's lint scope.
     "selenium/**",
+    // Stagehand journeys are plain Node ESM with their own package.json and
+    // node_modules; keep them out of the Next app's lint scope.
+    "stagehand/**",
   ]),
 ]);
 
