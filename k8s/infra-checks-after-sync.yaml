@@ -1,0 +1,42 @@
+# Argo CD PostSync hook: after every sync of this app, run the infra checks in Testkube.
+# If any check fails, this Job fails, and Argo CD marks the sync as failed.
+# Pattern from the Testkube docs: docs.testkube.io/articles/argocd-integration
+# The checks themselves live in infra-checks/ (see infra-checks/README.md).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: infra-checks-after-sync
+  namespace: order-demo                                          # same namespace as the testkube-api Secret below
+  annotations:
+    argocd.argoproj.io/hook: PostSync                            # runs once Argo CD has finished the sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation    # keeps the last run visible until the next sync
+spec:
+  backoffLimit: 0                     # one try, so a failed check fails the sync
+  activeDeadlineSeconds: 300          # a stuck run fails the sync after 5 minutes instead of hanging it
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: run-infra-checks
+          image: kubeshop/testkube-cli:latest
+          env:
+            - name: TK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: testkube-api  # created once with kubectl, never stored in git
+                  key: api-key
+            - name: TK_ORG_ID
+              valueFrom:
+                secretKeyRef:
+                  name: testkube-api
+                  key: org-id
+            - name: TK_ENV_ID
+              valueFrom:
+                secretKeyRef:
+                  name: testkube-api
+                  key: env-id
+          command: ["sh", "-c"]
+          args:
+            - |
+              testkube set context -c cloud --org-id "$TK_ORG_ID" --env-id "$TK_ENV_ID" -k "$TK_API_KEY"
+              testkube run testworkflow infra-health-suite --watch || exit 1

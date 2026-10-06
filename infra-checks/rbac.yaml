@@ -1,0 +1,49 @@
+# Read-only access for the infra checks.
+# Lets the runner's test pods read nodes, pods, events, services, deployments
+# and endpoint slices. It cannot change anything, and it cannot read Secrets.
+#
+# Apply once per cluster:
+#   kubectl apply -f infra-checks/rbac.yaml
+# Check it worked (prints "yes"):
+#   kubectl auth can-i list nodes --as=system:serviceaccount:testkube:exec-sa-testkube-runner
+#
+# exec-sa-testkube-runner is the service account the runner "testkube-runner"
+# gives its test pods, in the runner's namespace "testkube". For another runner,
+# use the account named in the Forbidden error a check prints without this access.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole                       # cluster-wide, because nodes do not live in any namespace
+metadata:
+  name: testkube-infra-checks-read
+rules:
+  # nodes:    every node Ready, one version, room for new pods, no pressure
+  # pods:     no pods crashlooping, no pods waiting for a node
+  # events:   kubectl describe nodes reads the node events
+  # services: every service has ready endpoints
+  - apiGroups: [""]
+    resources: ["nodes", "pods", "events", "services"]
+    verbs: ["get", "list"]
+  # deployments: CoreDNS has ready replicas
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
+  # endpointslices: every service has ready endpoints
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list"]
+  # /readyz: control plane is ready
+  - nonResourceURLs: ["/readyz", "/livez", "/healthz"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: testkube-infra-checks-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: testkube-infra-checks-read      # the ClusterRole above
+subjects:
+  - kind: ServiceAccount
+    name: exec-sa-testkube-runner       # the runner's execution service account
+    namespace: testkube                 # the runner's namespace
