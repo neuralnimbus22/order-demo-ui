@@ -1,0 +1,128 @@
+# Grafana for the lab: one data source (Loki) and one dashboard.
+# Chart: grafana-community/grafana 13.3.0 (Grafana 13.2). The Grafana chart
+# moved from grafana/helm-charts to grafana-community/helm-charts.
+# Install: see observability/README.md, step 4.
+
+# No admin password here on purpose. The chart generates one and stores it in
+# the Secret "grafana", key admin-password (README step 5 shows how to read it).
+adminUser: admin
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+# The helm test pod is not needed in the lab.
+testFramework:
+  enabled: false
+
+grafana.ini:
+  analytics:
+    # Do not send usage statistics from the lab.
+    reporting_enabled: false
+
+# Loki, at the service name and port that loki-values.yaml creates
+# (release "loki", gateway off, HTTP port 3100).
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        uid: loki
+        url: http://loki.observability.svc.cluster.local:3100
+        access: proxy
+        isDefault: true
+
+# Load dashboards from files the chart mounts under
+# /var/lib/grafana/dashboards/<provider>. The provider name "testkube" must
+# match the key under "dashboards" below.
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: testkube
+        orgId: 1
+        folder: Testkube
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/testkube
+
+dashboards:
+  testkube:
+    # One dashboard: how much each workflow logged, the step output itself,
+    # and the order-demo services' own logs underneath for comparison.
+    testkube-workflow-logs:
+      json: |
+        {
+          "title": "Testkube workflow logs",
+          "uid": "testkube-workflow-logs",
+          "schemaVersion": 39,
+          "editable": true,
+          "time": { "from": "now-1h", "to": "now" },
+          "refresh": "30s",
+          "templating": {
+            "list": [
+              {
+                "name": "workflow",
+                "label": "Workflow",
+                "type": "query",
+                "datasource": { "type": "loki", "uid": "loki" },
+                "query": "label_values({namespace=\"testkube\"}, workflow)",
+                "refresh": 2,
+                "includeAll": true,
+                "allValue": ".+",
+                "multi": true,
+                "sort": 1,
+                "current": { "selected": true, "text": ["All"], "value": ["$__all"] }
+              }
+            ]
+          },
+          "panels": [
+            {
+              "id": 1,
+              "type": "timeseries",
+              "title": "Log lines per workflow",
+              "gridPos": { "x": 0, "y": 0, "w": 24, "h": 7 },
+              "datasource": { "type": "loki", "uid": "loki" },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "sum by (workflow) (count_over_time({namespace=\"testkube\", workflow=~\"$workflow\"} [1m]))",
+                  "legendFormat": "{{workflow}}"
+                }
+              ],
+              "fieldConfig": {
+                "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 60 } },
+                "overrides": []
+              },
+              "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+            },
+            {
+              "id": 2,
+              "type": "logs",
+              "title": "Workflow step output",
+              "gridPos": { "x": 0, "y": 7, "w": 24, "h": 12 },
+              "datasource": { "type": "loki", "uid": "loki" },
+              "targets": [
+                { "refId": "A", "expr": "{namespace=\"testkube\", workflow=~\"$workflow\"}" }
+              ],
+              "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true }
+            },
+            {
+              "id": 3,
+              "type": "logs",
+              "title": "order-demo service logs",
+              "gridPos": { "x": 0, "y": 19, "w": 24, "h": 10 },
+              "datasource": { "type": "loki", "uid": "loki" },
+              "targets": [
+                { "refId": "A", "expr": "{namespace=\"order-demo\"}" }
+              ],
+              "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true }
+            }
+          ]
+        }

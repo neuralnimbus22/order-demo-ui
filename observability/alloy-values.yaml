@@ -1,0 +1,127 @@
+# Grafana Alloy for the lab: reads pod logs and sends them to Loki.
+# Chart: grafana/alloy 1.13.0 (Alloy v1.20).
+# Install: see observability/README.md, step 3.
+
+alloy:
+  # Do not send anonymous usage statistics to Grafana Labs from the lab.
+  enableReporting: false
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+  configMap:
+    # The pipeline, in Alloy's own config language. Read it top to bottom:
+    # find pods -> label them -> read their logs -> clean the lines -> send to Loki.
+    content: |
+      // 1. Find the pods to read: the Testkube namespace and the app namespace.
+      //    Names from: kubectl --context default get namespaces
+      discovery.kubernetes "pods" {
+        role = "pod"
+
+        namespaces {
+          names = ["testkube", "order-demo"]
+        }
+      }
+
+      // 2. Decide which pods to keep and turn Kubernetes details into Loki labels.
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+
+        // Keep every order-demo pod, and only the Testkube pods that run a
+        // workflow. The runner's own pods have no workflow label, so their
+        // logs stay out of Loki.
+        rule {
+          source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_testkube_io_workflow_name"]
+          separator     = ";"
+          regex         = "order-demo;.*|testkube;.+"
+          action        = "keep"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+
+        // The Testkube runner puts the label testkube.io/workflow-name on every
+        // workflow pod (pkg/testworkflows/testworkflowprocessor/constants in
+        // the Testkube repo). Discovery turns the dots, slash and dash into
+        // underscores, so it arrives as ..._testkube_io_workflow_name.
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_testkube_io_workflow_name"]
+          target_label  = "workflow"
+        }
+
+        // order-demo pods carry app=<service name> (see k8s/order-demo-ui.yaml).
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app"]
+          target_label  = "app"
+        }
+      }
+
+      // 3. Read each container's log through the Kubernetes API, the same way
+      //    kubectl logs does. This needs get on pods/log (see rbac below).
+      loki.source.kubernetes "pods" {
+        targets    = discovery.relabel.pods.output
+        forward_to = [loki.process.clean.receiver]
+      }
+
+      // 4. Clean the lines before they reach Loki.
+      loki.process "clean" {
+        // Testkube writes short control lines between steps into the same
+        // output. Each one starts with the bytes 0x01 0x05
+        // (cmd/testworkflow-init/instructions/emit.go in the Testkube repo).
+        stage.drop {
+          expression          = "^\\x01\\x05"
+          drop_counter_reason = "testkube_step_marker"
+        }
+
+        // Blank lines carry nothing.
+        stage.drop {
+          expression          = "^\\s*$"
+          drop_counter_reason = "blank_line"
+        }
+
+        forward_to = [loki.write.lab.receiver]
+      }
+
+      // 5. Send to Loki. Service name and port come from loki-values.yaml:
+      //    release "loki", gateway off, Loki's HTTP port 3100.
+      loki.write "lab" {
+        endpoint {
+          url = "http://loki.observability.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+
+controller:
+  # One Alloy pod reads logs for the whole cluster through the API. A
+  # Deployment, not the chart's default DaemonSet, so a cluster with more
+  # nodes would not read the same logs twice.
+  type: deployment
+  replicas: 1
+
+rbac:
+  create: true
+  # Read access only, only in the two namespaces Alloy reads. The chart turns
+  # this into a Role and RoleBinding in each namespace, with no cluster-wide
+  # access and no access to Secrets.
+  namespaces:
+    - testkube
+    - order-demo
+  rules:
+    - apiGroups: [""]
+      resources: ["pods", "pods/log"]
+      verbs: ["get", "list", "watch"]

@@ -1,0 +1,83 @@
+# Loki for the lab: one pod that stores log lines on the node's disk.
+# Chart: grafana-community/loki 18.13.8 (Loki 3.7). The OSS Loki chart moved to
+# grafana-community/helm-charts in March 2026; the chart in grafana/loki is now
+# for Grafana Enterprise Logs only.
+# Install: see observability/README.md, step 2.
+
+# Monolithic = every Loki component in one process, one pod. The chart's own
+# guidance: fine for small installs, up to a few tens of GB a day.
+deploymentMode: Monolithic
+
+loki:
+  # One tenant. Without this, Alloy and Grafana would have to send an
+  # X-Scope-OrgID header on every request.
+  auth_enabled: false
+
+  commonConfig:
+    # One copy of each log line, because there is one Loki pod.
+    replication_factor: 1
+
+  storage:
+    # Chunks and index go to the pod's volume, not to S3. The chart only allows
+    # this with exactly one Monolithic replica.
+    type: filesystem
+
+  # How Loki lays out its index. The chart refuses to install without one.
+  # tsdb + schema v13 is the current recommended layout; the date only has to
+  # be in the past.
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  # Keep three days of logs so the lab disk does not fill up.
+  # Retention runs in the compactor, which is inside the single pod.
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+  limits_config:
+    retention_period: 72h
+
+singleBinary:
+  replicas: 1
+  persistence:
+    # PersistentVolumeClaim on the cluster's default StorageClass.
+    # On the Dell that is k3s local-path (check: kubectl get storageclass).
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# The chart defaults these targets to 3 replicas each. They belong to the
+# SimpleScalable mode, which needs object storage, so they must be 0 here.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Not needed for one pod in a lab:
+gateway:
+  # nginx in front of Loki. Without it, Alloy and Grafana call the Loki
+  # service directly: http://loki.observability.svc.cluster.local:3100
+  enabled: false
+chunksCache:
+  # memcached for large installs
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  # writes test lines all the time; not wanted in the lab
+  enabled: false
+test:
+  # helm test pod; it needs the canary, so it goes too
+  enabled: false
