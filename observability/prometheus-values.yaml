@@ -1,0 +1,64 @@
+# Prometheus for the lab: one pod that reads the Testkube runner's metrics.
+# Chart: prometheus-community/prometheus 29.36.0 (Prometheus v3.15.0).
+# Install: see observability/README.md, step 3.
+
+# Only the Prometheus server. The chart also installs four add-ons by default;
+# none of them is needed to read the runner's metrics.
+alertmanager:
+  # Sends alerts. Nothing alerts in the lab.
+  enabled: false
+kube-state-metrics:
+  # Metrics about Kubernetes objects (deployments, pods). Not needed here.
+  enabled: false
+prometheus-node-exporter:
+  # The Dell's own CPU, disk and network. Not needed here.
+  enabled: false
+prometheus-pushgateway:
+  # For short jobs that push their metrics. The runner is read instead.
+  enabled: false
+
+server:
+  global:
+    # Read every target every 30 seconds (chart default: 1 minute), so a
+    # 15-second workflow run shows up quickly.
+    scrape_interval: 30s
+
+  # Keep three days, the same as Loki (loki-values.yaml, retention_period).
+  retention: 3d
+
+  persistentVolume:
+    # PersistentVolumeClaim on the cluster's default StorageClass.
+    # On the Dell that is k3s local-path (check: kubectl get storageclass).
+    size: 5Gi
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# Most of the chart's default jobs stay on: Prometheus itself, cAdvisor (CPU
+# and memory of every container, test pods included), and any service or pod
+# annotated prometheus.io/scrape. Two are turned off and one is added.
+scrapeConfigs:
+  # On k3s the API server, the kubelet and the rest run as one process, so
+  # these two jobs read the same internal k3s metrics, about 74,000 of them
+  # on every scrape (seen on the lab: 73,864 samples each). That was nine
+  # in ten of everything Prometheus stored, and the Testkube story does not
+  # use any of it.
+  kubernetes-api-servers:
+    enabled: false
+  kubernetes-nodes:
+    enabled: false
+
+  testkube-runner:
+    # The runner serves Prometheus metrics at /metrics on its HTTP port 8088.
+    # The runner chart's own ServiceMonitor points at the same port
+    # (k8s/helm/testkube-runner/templates/servicemonitor.yaml in the Testkube repo).
+    # Service name and port from: kubectl --context default -n testkube get svc
+    #   testkube-runner   ClusterIP   ...   8088/TCP
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - testkube-runner.testkube.svc.cluster.local:8088

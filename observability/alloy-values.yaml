@@ -81,6 +81,18 @@ alloy:
 
       // 4. Clean the lines before they reach Loki.
       loki.process "clean" {
+        // Lines older than three days go no further. Loki keeps three days
+        // (loki-values.yaml, retention_period) and refuses older lines with
+        // "timestamp too old". Without this, a service that has written
+        // nothing since it started sends its start-up lines again each time
+        // Alloy reopens its log stream (about once an hour), and Loki
+        // refuses them each time. Seen on the lab: order-demo pods that
+        // started on Sept 14.
+        stage.drop {
+          older_than          = "72h"
+          drop_counter_reason = "older_than_retention"
+        }
+
         // Testkube writes short control lines between steps into the same
         // output. Each one starts with the bytes 0x01 0x05
         // (cmd/testworkflow-init/instructions/emit.go in the Testkube repo).

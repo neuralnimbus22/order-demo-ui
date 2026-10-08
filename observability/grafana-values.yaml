@@ -1,10 +1,12 @@
-# Grafana for the lab: one data source (Loki) and one dashboard.
+# Grafana for the lab: two data sources (Loki, Prometheus) and three dashboards.
 # Chart: grafana-community/grafana 13.3.0 (Grafana 13.2). The Grafana chart
 # moved from grafana/helm-charts to grafana-community/helm-charts.
-# Install: see observability/README.md, step 4.
+# Install: see observability/README.md, step 5.
 
 # No admin password here on purpose. The chart generates one and stores it in
-# the Secret "grafana", key admin-password (README step 5 shows how to read it).
+# the Secret "grafana", key admin-password (README step 6 shows how to read it).
+# The admin login is only needed to change things; viewing needs no login
+# (see auth.anonymous below).
 adminUser: admin
 
 resources:
@@ -14,6 +16,14 @@ resources:
   limits:
     memory: 512Mi
 
+# Open Grafana straight from the browser at http://192.168.2.15:30300, with no
+# port-forward. 192.168.2.15 is the Dell's address on the home network.
+# 30300 is free: the NodePorts already in use are 31580 (nginx-service),
+# 30141 and 30897 (Traefik). Check: kubectl --context default get svc -A | grep NodePort
+service:
+  type: NodePort
+  nodePort: 30300
+
 # The helm test pod is not needed in the lab.
 testFramework:
   enabled: false
@@ -22,9 +32,16 @@ grafana.ini:
   analytics:
     # Do not send usage statistics from the lab.
     reporting_enabled: false
+  auth.anonymous:
+    # Anyone who opens the address sees the dashboards without logging in,
+    # read-only. The lab is only reachable on the home network.
+    enabled: true
+    org_role: Viewer
 
 # Loki, at the service name and port that loki-values.yaml creates
 # (release "loki", gateway off, HTTP port 3100).
+# Prometheus, at the service name and port that prometheus-values.yaml creates
+# (release "prometheus" -> service "prometheus-server", port 80).
 datasources:
   datasources.yaml:
     apiVersion: 1
@@ -35,6 +52,11 @@ datasources:
         url: http://loki.observability.svc.cluster.local:3100
         access: proxy
         isDefault: true
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        url: http://prometheus-server.observability.svc.cluster.local
+        access: proxy
 
 # Load dashboards from files the chart mounts under
 # /var/lib/grafana/dashboards/<provider>. The provider name "testkube" must
@@ -125,4 +147,702 @@ dashboards:
               "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true }
             }
           ]
+        }
+
+    # Runner metrics from Prometheus: is the runner up, how many runs passed
+    # and failed, how long runs and their steps took. Metric names from the
+    # runner's source (internal/app/api/metrics/metrics.go in the Testkube
+    # repo, tag v2.12.0, the version the lab runs):
+    #   testkube_testworkflow_executions_count         counter, labels name, result
+    #   testkube_testworkflow_executions_duration_ms   summary, same labels
+    #   testkube_testworkflow_execution_steps_duration_ms  gauge, per step
+    # The runner keeps a duration series for every workflow it has ever run.
+    # The per-workflow duration panel ends in "> 0" so workflows with no run
+    # in the last 24 hours drop out instead of showing as NaN.
+    testkube-runs:
+      json: |
+        {
+          "title": "Testkube runs",
+          "uid": "testkube-runs",
+          "schemaVersion": 39,
+          "editable": true,
+          "time": {
+            "from": "now-24h",
+            "to": "now"
+          },
+          "refresh": "30s",
+          "panels": [
+            {
+              "id": 1,
+              "type": "stat",
+              "title": "Runner",
+              "gridPos": {
+                "x": 0,
+                "y": 0,
+                "w": 6,
+                "h": 5
+              },
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "up{job=\"testkube-runner\"}",
+                  "instant": true
+                }
+              ],
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
+                    ]
+                  },
+                  "mappings": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "0": {
+                          "text": "Down",
+                          "index": 0
+                        },
+                        "1": {
+                          "text": "Up",
+                          "index": 1
+                        }
+                      }
+                    }
+                  ]
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "textMode": "value",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                }
+              }
+            },
+            {
+              "id": 2,
+              "type": "stat",
+              "title": "Passed runs, last 24 hours",
+              "gridPos": {
+                "x": 6,
+                "y": 0,
+                "w": 6,
+                "h": 5
+              },
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "sum(increase(testkube_testworkflow_executions_count{result=\"passed\"}[24h])) or vector(0)",
+                  "instant": true
+                }
+              ],
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "decimals": 0
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "textMode": "value",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                }
+              }
+            },
+            {
+              "id": 3,
+              "type": "stat",
+              "title": "Failed runs, last 24 hours",
+              "gridPos": {
+                "x": 12,
+                "y": 0,
+                "w": 6,
+                "h": 5
+              },
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "sum(increase(testkube_testworkflow_executions_count{result=\"failed\"}[24h])) or vector(0)",
+                  "instant": true
+                }
+              ],
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 1
+                      }
+                    ]
+                  },
+                  "decimals": 0
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "textMode": "value",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                }
+              }
+            },
+            {
+              "id": 4,
+              "type": "stat",
+              "title": "Average run, last 24 hours",
+              "gridPos": {
+                "x": 18,
+                "y": 0,
+                "w": 6,
+                "h": 5
+              },
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "sum(increase(testkube_testworkflow_executions_duration_ms_sum[24h])) / sum(increase(testkube_testworkflow_executions_duration_ms_count[24h]))",
+                  "instant": true
+                }
+              ],
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "text",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "ms",
+                  "decimals": 1
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "textMode": "value",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                }
+              }
+            },
+            {
+              "id": 5,
+              "type": "timeseries",
+              "title": "Runs per workflow",
+              "gridPos": {
+                "x": 0,
+                "y": 5,
+                "w": 24,
+                "h": 8
+              },
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "sum by (name, result) (increase(testkube_testworkflow_executions_count[$__rate_interval]))",
+                  "legendFormat": "{{name}} ({{result}})"
+                }
+              ],
+              "fieldConfig": {
+                "defaults": {
+                  "decimals": 0,
+                  "custom": {
+                    "drawStyle": "bars",
+                    "fillOpacity": 60,
+                    "lineWidth": 1
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              }
+            },
+            {
+              "id": 6,
+              "type": "bargauge",
+              "title": "Average run duration per workflow, last 24 hours",
+              "gridPos": {
+                "x": 0,
+                "y": 13,
+                "w": 12,
+                "h": 9
+              },
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "(sum by (name) (increase(testkube_testworkflow_executions_duration_ms_sum[24h])) / sum by (name) (increase(testkube_testworkflow_executions_duration_ms_count[24h]))) > 0",
+                  "legendFormat": "{{name}}",
+                  "instant": true
+                }
+              ],
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "ms",
+                  "decimals": 1,
+                  "min": 0,
+                  "color": {
+                    "mode": "fixed",
+                    "fixedColor": "blue"
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "orientation": "horizontal",
+                "displayMode": "basic",
+                "showUnfilled": true,
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                }
+              }
+            },
+            {
+              "id": 7,
+              "type": "table",
+              "title": "Step durations, latest run of each workflow",
+              "gridPos": {
+                "x": 12,
+                "y": 13,
+                "w": 12,
+                "h": 9
+              },
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "max by (workflow_name, step_name, status) (testkube_testworkflow_execution_steps_duration_ms)",
+                  "format": "table",
+                  "instant": true
+                }
+              ],
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "ms"
+                },
+                "overrides": []
+              },
+              "transformations": [
+                {
+                  "id": "organize",
+                  "options": {
+                    "excludeByName": {
+                      "Time": true
+                    },
+                    "renameByName": {
+                      "workflow_name": "Workflow",
+                      "step_name": "Step",
+                      "status": "Status",
+                      "Value": "Duration"
+                    }
+                  }
+                }
+              ],
+              "options": {
+                "showHeader": true
+              }
+            }
+          ]
+        }
+    # The starter dashboard Testkube publishes (assets/grafana-dasboard.json in
+    # the Testkube repo), unchanged except: its data source now points at the
+    # lab's Prometheus, and the import-only __inputs/__requires are removed.
+    testkube-starter:
+      json: |
+        {
+          "annotations": {
+            "list": [
+              {
+                "builtIn": 1,
+                "datasource": "-- Grafana --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "target": {
+                  "limit": 100,
+                  "matchAny": false,
+                  "tags": [],
+                  "type": "dashboard"
+                },
+                "type": "dashboard"
+              }
+            ]
+          },
+          "editable": true,
+          "gnetId": null,
+          "graphTooltip": 0,
+          "id": null,
+          "links": [],
+          "panels": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "description": "Executions distributions",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": -1,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 3,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "always",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "h": 9,
+                "w": 12,
+                "x": 0,
+                "y": 0
+              },
+              "id": 2,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "single"
+                }
+              },
+              "targets": [
+                {
+                  "exemplar": true,
+                  "expr": "testkube_testworkflow_executions_count{result=\"passed\"}",
+                  "hide": false,
+                  "instant": false,
+                  "interval": "1",
+                  "legendFormat": "{{name}}",
+                  "refId": "A"
+                },
+                {
+                  "hide": false,
+                  "refId": "B"
+                }
+              ],
+              "title": "SUCCESSFUL test executions",
+              "transparent": true,
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "description": "Executions distributions",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": -1,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "opacity",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "lineInterpolation": "smooth",
+                    "lineWidth": 1,
+                    "pointSize": 3,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "always",
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "h": 9,
+                "w": 12,
+                "x": 12,
+                "y": 0
+              },
+              "id": 4,
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "single"
+                }
+              },
+              "targets": [
+                {
+                  "exemplar": true,
+                  "expr": "testkube_testworkflow_executions_count{result=\"failed\"}",
+                  "hide": false,
+                  "instant": false,
+                  "interval": "1",
+                  "legendFormat": "{{name}}",
+                  "refId": "A"
+                },
+                {
+                  "hide": false,
+                  "refId": "B"
+                }
+              ],
+              "title": "FAILED test executions",
+              "transparent": true,
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "description": "Executions distributions",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "h": 9,
+                "w": 12,
+                "x": 12,
+                "y": 9
+              },
+              "id": 3,
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "text": {},
+                "textMode": "auto"
+              },
+              "pluginVersion": "8.1.2",
+              "targets": [
+                {
+                  "exemplar": true,
+                  "expr": "testkube_testworkflow_creations_count{}",
+                  "format": "table",
+                  "hide": false,
+                  "instant": false,
+                  "interval": "1",
+                  "intervalFactor": 10,
+                  "legendFormat": "{{type}} created",
+                  "refId": "A"
+                },
+                {
+                  "hide": false,
+                  "refId": "B"
+                }
+              ],
+              "title": "Test creations",
+              "transparent": true,
+              "type": "stat"
+            }
+          ],
+          "schemaVersion": 30,
+          "style": "dark",
+          "tags": [],
+          "templating": {
+            "list": []
+          },
+          "time": {
+            "from": "now-1h",
+            "to": "now"
+          },
+          "timepicker": {},
+          "timezone": "",
+          "title": "Testkube starter dashboard",
+          "uid": "jMtrP3nnz",
+          "version": 2
         }
