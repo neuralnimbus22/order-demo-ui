@@ -77,7 +77,7 @@ The three dashboards:
   Leave room for Testkube too: the `infra-health-suite` run needs six pods at
   the same moment (the suite plus its five checks). On Oct 8 2026 the Dell sat
   at 110 of 110 after this install, and the suite failed (see "What could go
-  wrong").
+  wrong"). Removing the five feature vClusters the same day freed 65 pods.
 
 ## Step 1: add the chart repositories
 
