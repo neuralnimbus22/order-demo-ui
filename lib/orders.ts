@@ -38,6 +38,9 @@ export interface PlacedOrder extends OrderResult {
 }
 
 const STORAGE_KEY = "sundry-orders-v1";
+// Builds before the v1 key saved orders under this key. Read it when the v1 key
+// is empty, so an upgrade keeps a user's order history instead of showing none.
+const LEGACY_STORAGE_KEY = "sundry-orders";
 
 function canUseStorage(): boolean {
   return typeof window !== "undefined" && !!window.localStorage;
@@ -46,7 +49,9 @@ function canUseStorage(): boolean {
 export function readOrders(): PlacedOrder[] {
   if (!canUseStorage()) return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw =
+      window.localStorage.getItem(STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as PlacedOrder[];
     return Array.isArray(parsed) ? parsed : [];
