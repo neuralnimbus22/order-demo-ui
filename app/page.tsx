@@ -2,10 +2,17 @@
 // Server-rendered through the same typed client the BFF routes use, so the
 // grid paints with data on first load. Filtering happens client-side in
 // <Storefront/>.
-import { listProducts, type Product } from "@/lib/backend";
+import Link from "next/link";
+import { getProduct, listProducts, type Product } from "@/lib/backend";
+import { formatPrice } from "@/lib/format";
 import Storefront from "@/components/storefront";
 
+// The product shown in the strip above the grid.
+const FEATURED_SKU = "BK-001";
+
 export default async function Home() {
+  const featured = await getProduct(FEATURED_SKU);
+
   let products: Product[] | null = null;
   try {
     products = await listProducts();
@@ -27,6 +34,23 @@ export default async function Home() {
           fair, shipped fast.
         </p>
       </section>
+
+      {featured && (
+        <Link
+          href={`/products/${featured.id}`}
+          data-testid="featured-product"
+          className="mb-10 flex items-center justify-between gap-4 rounded-2xl border border-indigo-100 bg-indigo-50 px-6 py-4 transition-colors hover:bg-indigo-100"
+        >
+          <span className="text-sm text-stone-700">
+            <span className="font-semibold text-indigo-700">Featured</span>
+            <span aria-hidden> · </span>
+            {featured.name}
+          </span>
+          <span className="text-sm font-semibold text-stone-900">
+            {formatPrice(featured.price)}
+          </span>
+        </Link>
+      )}
 
       {products === null ? (
         <div
