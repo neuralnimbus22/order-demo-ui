@@ -102,6 +102,12 @@ for exact shapes.**
 ### Working in this repo
 - All PR branches in this repo are **ephemeral demo branches**. Close and delete
   after demo without merging. **Never force push to main directly.**
+- **A push to any `demo/` branch starts a Testkube run.**
+  `.github/workflows/test-selection.yml` starts `pr-test-selection` for that
+  branch. When it passes, the `pr-test-selector` agent wakes up, picks the
+  Playwright specs and starts `playwright-ui-selected`. Each push costs one agent
+  chat. Push to a `demo/` branch only when you want that flow; use another
+  branch name otherwise.
 - Keep the laws in this file current as the app grows. After significant merges,
   run **`/update-wiki`** to refresh the descriptive docs under `openwiki/`.
 
