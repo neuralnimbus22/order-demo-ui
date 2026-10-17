@@ -1,0 +1,44 @@
+name: Test Selection on Demo Branches
+
+# Starts the per-change test selection flow in Testkube when a demo branch is
+# pushed. This job only starts the first Testkube workflow, pr-test-selection,
+# for the pushed branch. Everything after that runs in Testkube on its own:
+#   1. pr-test-selection lists the change and traces it to the specs (no AI).
+#   2. When it passes, the AI Agent Trigger pr-test-selection-trigger starts
+#      the pr-test-selector agent with that run's ID.
+#   3. The agent decides each spec, starts playwright-ui-selected with only
+#      the picked specs, and reports in the run's AI chat.
+#
+# Push, not pull_request: opening a PR in this repo also starts pr-sentinel
+# and the release gate, which this flow does not need.
+
+on:
+  push:
+    branches: ['demo/**']
+
+jobs:
+  start-test-selection:
+    # Deleting a branch is also a push. There is nothing to test then.
+    if: ${{ !github.event.deleted }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Testkube CLI
+        uses: kubeshop/setup-testkube@v1
+        with:
+          organization: tkcorg_b5ace2135f138dc8
+          environment: tkcenv_362177294460621a
+          token: ${{ secrets.TESTKUBE_API_TOKEN }}
+
+      - name: Start pr-test-selection for this branch
+        env:
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # Fire and do not watch. The CLI returns once the run is queued, and
+          # the trigger takes over from there.
+          testkube run testworkflow pr-test-selection \
+            --config branch="$BRANCH" \
+            --tag "commit=${SHA:0:7}"
+          echo "Started pr-test-selection for $BRANCH."
+          echo "Follow it: https://app.testkube.io/organization/tkcorg_b5ace2135f138dc8/environment/tkcenv_362177294460621a/dashboard/test-workflows/pr-test-selection"
