@@ -8,7 +8,7 @@ export default function RegisterPage() {
   return (
     <AuthCard
       title="Create your account"
-      subtitle="A minute now, everyday goods forever."
+      subtitle="One account for your cart, checkout and order history."
     >
       <RegisterForm />
     </AuthCard>
