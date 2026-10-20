@@ -14,6 +14,17 @@ import { defineConfig, devices } from "@playwright/test";
 // the only mode, so Playwright behaves like Cypress/Selenium/TestKube will.
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
+// Screenshots and videos are off unless a run asks for them, so the regular
+// runs stay as fast as before. A Testkube workflow turns them on with
+// PW_SCREENSHOT and PW_VIDEO, using Playwright's own values:
+//   PW_SCREENSHOT: off | on | only-on-failure
+//   PW_VIDEO:      off | on | retain-on-failure | on-first-retry
+// The files land in test-results/ and inside the HTML report.
+type ScreenshotMode = "off" | "on" | "only-on-failure";
+type VideoMode = "off" | "on" | "retain-on-failure" | "on-first-retry";
+const screenshot = (process.env.PW_SCREENSHOT ?? "off") as ScreenshotMode;
+const video = (process.env.PW_VIDEO ?? "off") as VideoMode;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -23,6 +34,8 @@ export default defineConfig({
   use: {
     baseURL,
     trace: "on-first-retry",
+    screenshot,
+    video,
   },
   projects: [
     {
